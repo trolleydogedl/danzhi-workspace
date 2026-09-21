@@ -154,18 +154,22 @@ export function IconSpinner({ className }: { className?: string }) {
 export function PressButton({
   className,
   children,
+  busy,
+  busyLabel,
+  disabled,
   ...rest
-}: ButtonHTMLAttributes<HTMLButtonElement>) {
+}: ButtonHTMLAttributes<HTMLButtonElement> & { busy?: boolean; busyLabel?: string }) {
   const [down, setDown] = useState(false);
   return (
     <button
       className={cn(className, down && "scale-[0.97]")}
+      disabled={disabled || busy}
       onPointerDown={() => setDown(true)}
       onPointerUp={() => setDown(false)}
       onPointerCancel={() => setDown(false)}
       {...rest}
     >
-      {children}
+      {busy ? busyLabel || children : children}
     </button>
   );
 }
