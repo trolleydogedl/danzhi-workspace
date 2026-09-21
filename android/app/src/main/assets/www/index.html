@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="color-scheme" content="light" />
+  <meta name="theme-color" content="#FFF6F0" />
+  <title>旦知</title>
+  <style>
+    :root {
+      --bg:#FFF6F0; --elev:#FFFFFF; --surface:#FFE8DC; --fg:#3B2A24;
+      --muted:#8C7068; --subtle:#B59A92; --primary:#FF6B57; --on:#FFFFFF;
+      --accent:#FF6B57; --danger:#FF5A6A; --ok:#5CB87A; --busy:#FF7A7A;
+      --border:rgba(59,42,36,.10);
+      --shadow:0 10px 28px rgba(255,107,87,.12);
+      --r-sm:12px; --r-md:18px; --r-lg:26px;
+      --ease:cubic-bezier(.22,1,.36,1);
+    }
+    * { box-sizing:border-box; }
+    html,body { margin:0; background:var(--bg); color:var(--fg);
+      font:15px/1.5 "Noto Sans SC","Source Han Sans SC",ui-rounded,system-ui,sans-serif;
+      min-height:100%; overscroll-behavior-x:none; }
+    h1,h2 { margin:0; font-weight:700; letter-spacing:-.03em; }
+    input,button { font:inherit; color:inherit; }
+    input { width:100%; height:48px; border:1px solid var(--border); border-radius:16px;
+      padding:0 16px; background:var(--elev); color:var(--fg); outline:none;
+      transition:border-color .2s var(--ease), box-shadow .2s var(--ease); }
+    input:focus { border-color:var(--primary); box-shadow:0 0 0 4px rgba(255,107,87,.16); }
+    input::placeholder { color:var(--subtle); }
+    button { cursor:pointer; touch-action:manipulation; }
+    button:disabled:not(.busy) { opacity:.45; cursor:default; }
+    .wrap { max-width:480px; margin:0 auto; min-height:100dvh; padding:28px 20px 118px; }
+    .mark { width:76px; height:76px; }
+    .mark svg { width:76px; height:76px; display:block; }
+    .nav { position:fixed; left:12px; right:12px; bottom:calc(10px + env(safe-area-inset-bottom));
+      display:grid; grid-template-columns:repeat(5,1fr);
+      background:rgba(255,255,255,.92); border:1px solid var(--border);
+      border-radius:28px; padding:6px; box-shadow:var(--shadow); backdrop-filter:blur(12px); }
+    .nav button.on { color:var(--primary); font-weight:700; background:var(--surface); border-radius:22px; }
+    .card { background:var(--elev); box-shadow:var(--shadow); border-radius:var(--r-md);
+      padding:14px 16px; margin:8px 0; border:1px solid var(--border); }
+    .btn { height:52px; border:0; border-radius:18px; background:var(--primary);
+      color:var(--on); width:100%; font-weight:700;
+      display:flex; align-items:center; justify-content:center; gap:8px;
+      transition:background-color .15s var(--ease), transform .12s var(--ease); }
+    .btn:active, .btn.busy { background:#E25544; transform:scale(.97); opacity:1; }
+    .btn-ghost { height:48px; border:1px solid var(--border); border-radius:18px;
+      background:var(--elev); color:var(--fg); width:100%; font-weight:600; }
+    .btn-ghost:active { background:var(--surface); }
+    .hint { color:var(--subtle); font-size:12px; line-height:1.55; }
+    .nav button { height:52px; border:0; background:none; color:var(--subtle); font-size:10px;
+      display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; }
+    .nav button svg { width:22px; height:22px; }
+    .badge { font-size:11px; background:var(--surface); border-radius:999px; padding:3px 8px; color:var(--muted); }
+    .urgent { color:var(--danger); }
+    .ok { color:var(--ok); }
+    .hidden { display:none !important; }
+    label { display:block; font-size:12px; color:var(--muted); margin:14px 0 6px; font-weight:600; }
+    .seg { display:flex; gap:0; background:var(--surface); border-radius:16px; overflow:hidden; border:1px solid var(--border); }
+    .seg button { flex:1; height:44px; border:0; background:transparent; color:var(--subtle); font-weight:700; }
+    .seg button.on { background:var(--primary); color:var(--on); }
+    .toast { position:fixed; left:50%; bottom:96px; transform:translateX(-50%); background:var(--fg); color:var(--on);
+      padding:8px 14px; border-radius:999px; font-size:12px; z-index:20; opacity:0; pointer-events:none; transition:opacity .2s; }
+    .toast.show { opacity:1; }
+    .next { background:var(--primary); color:var(--on); border-radius:22px; padding:18px; margin:0 0 14px; box-shadow:var(--shadow); }
+    .next .k { font-size:11px; letter-spacing:.12em; opacity:.8; }
+    .slots { display:flex; gap:4px; margin-top:10px; }
+    .slots i { flex:1; height:18px; border-radius:5px; background:var(--ok); border:1px solid color-mix(in srgb, var(--ok) 55%, #000); }
+    .slots i.busy { background:var(--busy); border-color:color-mix(in srgb, var(--busy) 70%, #000); }
+    .src-link { margin-top:8px; min-height:36px; border:1px solid var(--border); background:var(--surface); color:var(--primary); font-size:12px; font-weight:700; padding:0 12px; border-radius:12px; }
+    .theme-dot { width:14px; height:14px; border-radius:99px; display:inline-block; margin-right:6px; vertical-align:middle; border:1px solid var(--border); }
+    .slots i.now { outline:3px solid #1A120F; outline-offset:2px; box-shadow:0 0 0 1px #fff; position:relative; z-index:1; }
+    .sec { font-size:12px; color:var(--muted); margin:16px 0 6px; font-weight:700; }
+    article.unread { box-shadow:0 0 0 2px rgba(255,107,87,.28), var(--shadow); }
+    article.read { opacity:.92; }
+    article.picked { outline:2px solid var(--primary); }
+    .due { display:inline-flex; align-items:center; gap:8px; margin-top:10px; color:var(--danger);
+      font-weight:700; font-size:14px; background:#FFE4E2; padding:4px 10px; border-radius:999px; }
+    .due-mark { width:8px; height:8px; border-radius:99px; background:var(--danger); }
+    #reader { position:fixed; inset:0; background:var(--bg); z-index:40; display:flex; flex-direction:column; }
+    #reader.hidden { display:none !important; }
+    .reader-bar { display:flex; align-items:center; gap:8px; padding:10px 14px; padding-top:calc(10px + env(safe-area-inset-top)); background:var(--elev); border-bottom:1px solid var(--border); }
+    .reader-bar strong { flex:1; font-size:15px; line-height:1.3; }
+    #readerFrame { flex:1; width:100%; border:0; background:#fff; }
+    #selectBar { position:fixed; left:12px; right:12px; bottom:86px; display:flex; gap:8px; padding:10px; background:var(--elev); border-radius:20px; box-shadow:var(--shadow); z-index:15; }
+    #selectBar.hidden { display:none !important; }
+    .chk { width:18px; height:18px; accent-color:var(--primary); }
+    .legend { display:none; }
+    .chips { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0 12px; }
+    .chips button { height:36px; padding:0 12px; border-radius:999px; border:1px solid var(--border); background:var(--elev); color:var(--muted); font-size:12px; }
+    .chips button.on { background:var(--fg); color:var(--on); border-color:var(--fg); }
+    .qrbox { background:#fff; border-radius:24px; padding:16px; text-align:center; border:1px solid var(--border); box-shadow:var(--shadow); position:relative; }
+    .qrbox img { width:220px; height:220px; object-fit:contain; background:#fff; }
+    .qrbox.refreshing img { opacity:.35; transform:scale(.96); }
+    .qrbox.fresh img { animation:qrpop .35s var(--ease); }
+    @keyframes qrpop { from { transform:scale(.9); opacity:.4 } to { transform:scale(1); opacity:1 } }
+    .days { display:flex; gap:6px; overflow:auto; padding-bottom:8px; }
+    .days button { min-width:52px; height:52px; border-radius:16px; border:1px solid var(--border); background:var(--elev); color:var(--muted); }
+    .days button.on { background:var(--primary); color:var(--on); border-color:var(--primary); }
+    .eye { position:absolute; right:6px; top:50%; transform:translateY(-50%); width:40px; height:40px;
+      border:0; background:none; color:var(--subtle); }
+    .field { position:relative; }
+    .kicker { font-size:12px; letter-spacing:.08em; color:var(--subtle); font-weight:600; }
+    .status { display:none; align-items:flex-start; gap:10px; margin-top:12px;
+      padding:14px 16px; border-radius:18px; background:var(--primary); color:var(--on); }
+    .status.show { display:flex; }
+    .status .sub { margin-top:2px; font-size:12px; opacity:.8; }
+    .spin { width:20px; height:20px; flex-shrink:0; animation:spin .7s linear infinite; }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    .stamp { float:right; font-size:11px; font-weight:700; color:var(--primary);
+      background:var(--surface); padding:4px 8px; border-radius:999px; }
+    .free { color:#2f8a52; background:#d9f6e3; }
+    .occ { color:#b4232a; background:#ffe1e1; }
+  </style>
+</head>
+<body>
+<div id="login" class="wrap">
+  <div class="mark" aria-hidden="true">
+    <svg viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="32" fill="#FF6B57"/>
+      <ellipse cx="32" cy="16" rx="18" ry="9" fill="#fff" opacity=".16"/>
+      <rect x="19" y="8" width="26" height="30" rx="4" fill="none" stroke="#FFF6F0" stroke-width="3.8"/>
+      <rect x="23" y="12" width="18" height="8" rx="1.6" fill="#FFB8AC"/>
+      <rect x="23" y="26" width="18" height="8" rx="1.6" fill="#FFB8AC"/>
+      <rect x="19" y="21.1" width="26" height="3.8" fill="#FFF6F0"/>
+      <rect x="12" y="46" width="40" height="5" rx="2.5" fill="#FFF6F0"/>
+    </svg>
+  </div>
+  <p class="kicker" style="margin-top:22px">复旦校园小助手</p>
+  <h1 style="margin-top:8px;font-size:40px">旦知</h1>
+  <p class="hint" style="margin-top:8px;max-width:32ch">先填学号密码。通过后再打开 Authenticator，输入 6 位码。</p>
+  <p id="buildInfo" class="hint" style="margin-top:8px;font-weight:600">1.25.0 · 正在初始化登录模块…</p>
+  <form id="loginForm" action="javascript:void(0)" onsubmit="return false;">
+    <p class="kicker" style="margin-top:18px">步骤 1 / 2</p>
+    <label>学号<input id="user" inputmode="numeric" autocomplete="username" required placeholder="UIS 学号"></label>
+    <label>密码
+      <div class="field">
+        <input id="pw" type="password" autocomplete="current-password" required placeholder="UIS 密码">
+        <button class="eye" type="button" id="togglePw" aria-label="显示密码">显</button>
+      </div>
+    </label>
+    <button class="btn" id="loginBtn" type="button" style="margin-top:20px">登录</button>
+    <div class="status" id="loginStatus">
+      <svg class="spin" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="8.5" stroke="currentColor" stroke-opacity=".22" stroke-width="2.6"/><path d="M20.5 12a8.5 8.5 0 0 0-8.5-8.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+      <div>
+        <p id="loginStatusText" style="margin:0;font-weight:600">已点到。正在连接复旦统一认证…</p>
+        <p class="sub">通常需要几秒，学号密码会保留</p>
+      </div>
+    </div>
+  </form>
+  <p id="loginErr" class="hint" style="margin-top:12px"></p>
+</div>
+<div id="mfa" class="wrap hidden">
+  <p class="kicker">步骤 2 / 2</p>
+  <h1 style="margin-top:8px;font-size:32px">动态口令</h1>
+  <p class="hint">学号密码已通过。打开 Authenticator，输入当前 6 位码。</p>
+  <form id="mfaForm" action="javascript:void(0)" onsubmit="return false;">
+    <label>6 位码<input id="code" inputmode="numeric" maxlength="6" required placeholder="000000" style="letter-spacing:.4em;font-size:22px"></label>
+    <button class="btn" id="mfaBtn" type="button" style="margin-top:16px">确认</button>
+    <button class="btn-ghost" type="button" style="margin-top:8px" onclick="show('login')">返回</button>
+  </form>
+  <p id="mfaErr" class="hint" style="margin-top:12px"></p>
+</div>
+<div id="app" class="hidden">
+  <div id="feed" class="wrap">
+    <p class="kicker">信匣</p>
+    <h1 id="feedTitle" style="margin-top:6px;font-size:32px">巡检中</h1>
+    <p id="feedMeta" class="hint" style="margin-top:4px"></p>
+    <div class="chips" id="feedChips">
+      <button data-filter="all" class="on">最近</button>
+      <button data-filter="soon">即将到期</button>
+      <button data-filter="ddl">作业</button>
+      <button data-filter="mail">邮件</button>
+      <button data-filter="trash" id="trashChip">回收站</button>
+    </div>
+    <div id="feedList"></div>
+  </div>
+  <div id="table" class="wrap hidden">
+    <p class="kicker">课表</p>
+    <h1 id="tableTitle" style="margin-top:6px;font-size:32px">今日</h1>
+    <div id="nextBox"></div>
+    <div class="days" id="days"></div>
+    <div id="tableList"></div>
+  </div>
+  <div id="pass" class="wrap hidden">
+    <p class="kicker">校园码</p>
+    <h1 style="margin-top:6px;font-size:32px">生活码</h1>
+    <p class="hint" id="qrHint"></p>
+    <div class="qrbox" id="qrbox" style="margin-top:14px"><p class="hint" style="color:#666">加载中…</p></div>
+    <p class="hint" id="qrMeta" style="text-align:center;margin-top:8px"></p>
+    <button class="btn" id="qrBtn" style="margin-top:14px" onclick="refreshQr(true)">刷新生活码</button>
+    <button class="btn-ghost" style="margin-top:8px" onclick="doScan()">扫一扫</button>
+    <p class="hint" id="scanMsg"></p>
+  </div>
+  <div id="rooms" class="wrap hidden">
+    <p class="kicker">空教室</p>
+    <h1 style="margin-top:6px;font-size:32px">哪间空着</h1>
+    <div class="chips" id="bchips"></div>
+    <div id="roomList"><p class="hint">选择楼宇后查询。</p></div>
+  </div>
+  <div id="set" class="wrap hidden">
+    <p class="kicker">设置</p>
+    <h1 id="setName" style="margin-top:6px;font-size:32px">已登录</h1>
+    <p class="hint" id="setVer">版本 1.25.0</p>
+    <div class="card">
+      <p style="margin:0 0 10px;font-weight:500">外观</p>
+      <div class="chips" id="themeChips">
+        <button data-theme="peach" class="on"><i class="theme-dot" style="background:#FF7B6A"></i>蜜桃</button>
+        <button data-theme="mint"><i class="theme-dot" style="background:#3BA56A"></i>青柠</button>
+        <button data-theme="matcha"><i class="theme-dot" style="background:#6B8F71"></i>抹茶</button>
+        <button data-theme="sky"><i class="theme-dot" style="background:#3D7EEA"></i>晴空</button>
+        <button data-theme="ocean"><i class="theme-dot" style="background:#1D9A9A"></i>海盐</button>
+        <button data-theme="grape"><i class="theme-dot" style="background:#7B5EA7"></i>葡萄</button>
+        <button data-theme="rose"><i class="theme-dot" style="background:#C45C7A"></i>蔷薇</button>
+        <button data-theme="sand"><i class="theme-dot" style="background:#C4A35A"></i>麦芽</button>
+        <button data-theme="paper"><i class="theme-dot" style="background:#C45C4A"></i>宣纸</button>
+        <button data-theme="ink"><i class="theme-dot" style="background:#2A2623"></i>墨夜</button>
+        <button data-theme="blossom"><i class="theme-dot" style="background:#E88BA8"></i>樱花</button>
+        <button data-theme="dusk"><i class="theme-dot" style="background:#E07A3D"></i>黄昏</button>
+        <button data-theme="aurora"><i class="theme-dot" style="background:#3DB8A0"></i>极光</button>
+        <button data-theme="lilac"><i class="theme-dot" style="background:#8B7CC9"></i>雪青</button>
+        <button data-theme="caramel"><i class="theme-dot" style="background:#B56B3A"></i>焦糖</button>
+        <button data-theme="bamboo"><i class="theme-dot" style="background:#4F8F62"></i>竹影</button>
+        <button data-theme="cloud"><i class="theme-dot" style="background:#6B7380"></i>云灰</button>
+        <button data-theme="berry"><i class="theme-dot" style="background:#C43D5B"></i>浆果</button>
+        <button data-theme="cream"><i class="theme-dot" style="background:#E8C47A"></i>奶油</button>
+        <button data-theme="soda"><i class="theme-dot" style="background:#5AB0E8"></i>汽水</button>
+        <button data-theme="milktea"><i class="theme-dot" style="background:#C48A6A"></i>奶茶</button>
+        <button data-theme="moon"><i class="theme-dot" style="background:#8FA2C4"></i>月光</button>
+        <button data-theme="tangerine"><i class="theme-dot" style="background:#F08A4B"></i>橘子</button>
+        <button data-theme="lotus"><i class="theme-dot" style="background:#D98CB3"></i>莲花</button>
+        <button data-theme="celeste"><i class="theme-dot" style="background:#6AA8A0"></i>青瓷</button>
+        <button data-theme="persimmon"><i class="theme-dot" style="background:#E85D4C"></i>柿子</button>
+        <button data-theme="night"><i class="theme-dot" style="background:#5C4A7A"></i>夜樱</button>
+        <button data-theme="mist"><i class="theme-dot" style="background:#7A90B4"></i>雾蓝</button>
+        <button data-theme="strawberry"><i class="theme-dot" style="background:#E24B6A"></i>草莓</button>
+        <button data-theme="lemon"><i class="theme-dot" style="background:#D6B23A"></i>柠檬</button>
+        <button data-theme="taro"><i class="theme-dot" style="background:#9A7AB8"></i>芋泥</button>
+        <button data-theme="oat"><i class="theme-dot" style="background:#B89A78"></i>燕麦</button>
+      </div>
+    </div>
+    <div class="card">
+      <p style="margin:0 0 10px;font-weight:500">巡检间隔</p>
+      <div class="seg" id="seg">
+        <button data-min="15">15 分</button>
+        <button data-min="30">30 分</button>
+        <button data-min="60">60 分</button>
+      </div>
+      <p class="hint" id="segHint" style="margin-top:8px">登录后会自动开启后台。通知栏会留一条静音「旦知守护中」，新邮件和作业会弹出提醒。</p>
+    </div>
+    <div class="card">
+      <p style="margin:0 0 6px;font-weight:500">新邮件短信</p>
+      <p class="hint">新邮件可发送系统通知；填写手机号即启用额外短信，并需要短信权限，可能产生运营商费用。留空不发短信。</p>
+      <input id="smsPhone" placeholder="11 位手机号，可留空" inputmode="numeric" maxlength="11" style="margin-top:8px">
+    </div>
+    <div class="card">
+      <p style="margin:0 0 6px;font-weight:500">学生云邮箱</p>
+      <p class="hint">默认用 UIS 密码登录腾讯企业邮（学号@m.fudan.edu.cn）。若开启了安全登录，再在此填写客户端专用密码。</p>
+      <input id="mailPassword" type="password" autocomplete="off" placeholder="仅保存在本机的加密存储中">
+      <button class="btn-ghost" id="mailSave" type="button">保存邮箱凭据</button>
+      <p class="hint" id="mailSettingsMsg"></p>
+    </div>
+    <div class="card">
+      <label><input type="checkbox" id="backgroundEnabled" style="width:18px;height:18px"> 启用后台巡检与推送</label>
+      <p class="hint" id="settingsMsg">登录后默认开启。关掉后不再在后台拉信匣。</p>
+    </div>
+    <div class="card" id="health"></div>
+    <button class="btn" id="pollBtn" onclick="doPoll(true)">立即巡检</button>
+    <button class="btn-ghost" style="margin-top:8px" onclick="keepAlive()">允许通知与忽略电池优化</button>
+    <button class="btn-ghost" style="margin-top:8px" onclick="doLogout()">退出</button>
+  </div>
+  <nav class="nav">
+    <button class="on" data-tab="feed"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M4.2 6.8h15.6c.99 0 1.8.81 1.8 1.8v8.6c0 .99-.81 1.8-1.8 1.8H4.2c-.99 0-1.8-.81-1.8-1.8V8.6c0-.99.81-1.8 1.8-1.8Z"/><path d="M3.2 8.2 12 14.4 20.8 8.2" fill="none" stroke="#fff8f0" stroke-width="1.7" stroke-linejoin="round"/></svg>信匣</button>
+    <button data-tab="table"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3.2h2.2v3.2H8zM13.8 3.2H16v3.2h-2.2z"/><path fill-rule="evenodd" d="M5 6.4h14c1.1 0 2 .9 2 2v11c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2v-11c0-1.1.9-2 2-2zm0 3.4v1.6h14V9.8H5zm1.7 3.8h3.1v3.1H6.7v-3.1zm5.2 0h3.1v3.1h-3.1v-3.1zm5.2 0H20v3.1h-2.9v-3.1z"/></svg>课表</button>
+    <button data-tab="pass"><svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M3.2 3.2h7.4v7.4H3.2V3.2zm2 2v3.4h3.4V5.2H5.2zM13.4 3.2h7.4v7.4h-7.4V3.2zm2 2v3.4h3.4V5.2h-3.4zM3.2 13.4h7.4v7.4H3.2v-7.4zm2 2v3.4h3.4v-3.4H5.2z"/><rect x="13.4" y="13.4" width="3.2" height="3.2" rx="0.4"/><rect x="17.6" y="13.4" width="3.2" height="3.2" rx="0.4"/><rect x="13.4" y="17.6" width="3.2" height="3.2" rx="0.4"/><rect x="17.6" y="17.6" width="3.2" height="3.2" rx="0.4"/></svg>校园码</button>
+    <button data-tab="rooms"><svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M4.2 20.8V8.6L12 4.2l7.8 4.4v12.2h-2.2v-10L12 6.6 6.4 10.8v10H4.2zm6 0v-6.2h3.6v6.2h-3.6z"/></svg>教室</button>
+    <button data-tab="set"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="3.2" y="5.2" width="17.6" height="2.2" rx="1.1"/><circle cx="8.2" cy="6.3" r="2.15"/><rect x="3.2" y="10.9" width="17.6" height="2.2" rx="1.1"/><circle cx="14.6" cy="12" r="2.15"/><rect x="3.2" y="16.6" width="17.6" height="2.2" rx="1.1"/><circle cx="10.4" cy="17.7" r="2.15"/></svg>设置</button>
+  </nav>
+</div>
+<div id="reader" class="hidden">
+  <div class="reader-bar">
+    <button class="btn-ghost" id="readerBack" type="button" style="width:auto;padding:0 14px">返回</button>
+    <strong id="readerTitle">正文</strong>
+    <button class="btn-ghost" id="readerOpen" type="button" style="width:auto;padding:0 14px">原平台</button>
+  </div>
+  <iframe id="readerFrame" sandbox="allow-same-origin" title="正文"></iframe>
+</div>
+<div id="selectBar" class="hidden">
+  <button class="btn-ghost" id="selectCancel" type="button">取消</button>
+  <button class="btn" id="selectTrash" type="button">移入回收站</button>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+const PERIODS = [
+  {n:1,s:"08:00",e:"08:45"},{n:2,s:"08:55",e:"09:40"},{n:3,s:"09:55",e:"10:40"},
+  {n:4,s:"10:50",e:"11:35"},{n:5,s:"11:45",e:"12:30"},{n:6,s:"13:30",e:"14:15"},
+  {n:7,s:"14:25",e:"15:10"},{n:8,s:"15:25",e:"16:10"},{n:9,s:"16:20",e:"17:05"},
+  {n:10,s:"17:15",e:"18:00"},{n:11,s:"18:30",e:"19:15"},{n:12,s:"19:25",e:"20:10"},
+  {n:13,s:"20:20",e:"21:05"}
+];
+const WD = "一二三四五六日";
+const SOURCE_ZH = {math:"数院",jwc:"教务",elearning:"课堂",ehall:"办事",mail:"邮箱",ecard:"一卡通",timetable:"课表"};
+let lastPoll = null;
+let selectedDay = jsDay();
+let selectedBuilding = "H2";
+let intervalMin = 10;
+let pollBusy = false;
+let loginTimer = null;
+let loginInFlight = false;
+
+function jsDay(){ const d=new Date().getDay(); return d===0?7:d; }
+function toMin(hhmm){ const [h,m]=hhmm.split(":").map(Number); return h*60+m; }
+function nowMin(){ const n=new Date(); return n.getHours()*60+n.getMinutes(); }
+function show(id){ ["login","mfa","app"].forEach(k => $(k).classList.toggle("hidden", k!==id)); }
+function toast(t){ const el=$("toast"); el.textContent=t; el.classList.add("show"); setTimeout(()=>el.classList.remove("show"), 1800); }
+function esc(s){ return String(s||"").replace(/[&<>\"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c])); }
+function periodLabel(a,b){
+  const x=PERIODS.find(p=>p.n===a), y=PERIODS.find(p=>p.n===b);
+  if(!x||!y) return `第${a}-${b}节`;
+  return `${x.s}–${y.e}`;
+}
+function setBusy(btn,on,label){
+  if(!btn) return;
+  btn.disabled=!!on;
+  btn.classList.toggle("busy", !!on);
+  if(label) btn.textContent=label;
+}
+function remember(){
+  try { sessionStorage.setItem("dz_user", $("user").value); } catch(e){}
+}
+
+let loginRequestId = "", pollRequestId = "";
+let pollTimer = null;
+let requestSerial = 0;
+function nextRequestId(){ return Date.now().toString(36)+"-"+(++requestSerial); }
+function native(){ return typeof Danzhi !== "undefined"; }
+
+function showStatus(id, on, text){
+  const el = $(id);
+  if (!el) return;
+  el.classList.toggle("show", !!on);
+  const p = el.querySelector("p");
+  if (p && text) p.textContent = text;
+}
+
+function doLogin(){
+  if (loginInFlight) return;
+  remember();
+  const user = $("user").value.trim();
+  const pass = $("pw").value;
+  if (!user || !pass) { $("loginErr").textContent = "请填写学号和密码"; $("loginErr").className="urgent hint"; return; }
+  if (!native()) { $("loginErr").textContent = "请在安装包内登录。网页预览不能代替 UIS 会话。"; $("loginErr").className="urgent hint"; return; }
+  loginInFlight = true;
+  loginRequestId = nextRequestId();
+  $("loginErr").textContent = "";
+  showStatus("loginStatus", true, "已点到。正在连接复旦统一认证…");
+  setBusy($("loginBtn"), true, "正在连接统一认证…");
+  clearTimeout(loginTimer);
+  loginTimer = setTimeout(() => {
+    loginInFlight = false;
+    loginRequestId = "";
+    setBusy($("loginBtn"), false, "登录");
+    showStatus("loginStatus", false);
+    $("loginErr").textContent = "登录超时。请检查网络后重试，输入不会被清空。";
+    $("loginErr").className = "urgent hint";
+  }, 45000);
+  try { Danzhi.login(user, pass, "", "", loginRequestId); }
+  catch(e) {
+    loginInFlight = false;
+    clearTimeout(loginTimer);
+    setBusy($("loginBtn"), false, "登录");
+    showStatus("loginStatus", false);
+    $("loginErr").textContent = String(e);
+    $("loginErr").className = "urgent hint";
+  }
+}
+function doMfa(){
+  if (loginInFlight) return;
+  remember();
+  const code = $("code").value.trim();
+  if (!/^[0-9]{6}$/.test(code)) { $("mfaErr").textContent = "请输入 6 位动态口令"; $("mfaErr").className="urgent hint"; return; }
+  loginInFlight = true;
+  loginRequestId = nextRequestId();
+  $("mfaErr").textContent = "正在校验动态口令…";
+  $("mfaErr").className = "hint";
+  setBusy($("mfaBtn"), true, "正在校验…");
+  clearTimeout(loginTimer);
+  loginTimer = setTimeout(() => {
+    loginInFlight=false; loginRequestId=""; setBusy($("mfaBtn"),false,"确认");
+    $("mfaErr").textContent="动态口令校验超时；未自动重复提交。";
+  },45000);
+  try { Danzhi.login($("user").value.trim(), "", "", code, loginRequestId); }
+  catch(e) {
+    loginInFlight = false;
+    setBusy($("mfaBtn"), false, "确认");
+    $("mfaErr").textContent = String(e);
+  }
+}
+
+$("loginBtn").addEventListener("pointerdown", (e) => { if (e.button === 0 || e.pointerType !== "mouse") doLogin(); });
+$("loginBtn").addEventListener("click", doLogin);
+$("mfaBtn").addEventListener("pointerdown", (e) => { if (e.button === 0 || e.pointerType !== "mouse") doMfa(); });
+$("mfaBtn").addEventListener("click", doMfa);
+$("loginForm").addEventListener("submit", (e) => { e.preventDefault(); e.stopPropagation(); doLogin(); return false; });
+$("mfaForm").addEventListener("submit", (e) => { e.preventDefault(); e.stopPropagation(); doMfa(); return false; });
+const buildInfo = $("buildInfo");
+if (buildInfo) {
+  buildInfo.textContent = native() ? "1.25.0 · 安装包登录" : "请在安装包内登录";
+  buildInfo.className = native() ? "ok hint" : "urgent hint";
+}
+window.addEventListener("error", (e) => {
+  const msg = "界面脚本错误：" + (e.message || "未知错误");
+  if ($("loginErr")) { $("loginErr").textContent = msg; $("loginErr").className = "urgent hint"; }
+});
+window.addEventListener("unhandledrejection", (e) => {
+  const msg = "界面异步错误：" + String(e.reason || "未知错误");
+  if ($("loginErr")) { $("loginErr").textContent = msg; $("loginErr").className = "urgent hint"; }
+});
+$("togglePw").onclick = () => {
+  const p = $("pw");
+  p.type = p.type === "password" ? "text" : "password";
+  $("togglePw").textContent = p.type === "password" ? "显" : "隐";
+};
+
+window.onLoginResult = function(raw){
+  let r; try { r=JSON.parse(raw); } catch(e){ $("loginErr").textContent="登录结果无法解析"; return; }
+  if (!loginRequestId || r.requestId !== loginRequestId) return;
+  loginRequestId="";
+  loginInFlight = false;
+  clearTimeout(loginTimer);
+  setBusy($("loginBtn"), false, "登录");
+  setBusy($("mfaBtn"), false, "确认");
+  showStatus("loginStatus", false);
+  if (r.status === "ok") {
+    $("loginErr").textContent = r.note || "会话已确认";
+    $("loginErr").className = "ok hint";
+    show("app");
+    $("pw").value="";
+    toast("登录流程完成，请点击立即巡检验证各系统");
+  } else if (r.status === "mfa") {
+    show("mfa");
+    $("mfaErr").textContent = "密码已通过，请输入当前 6 位码。";
+    $("mfaErr").className = "hint";
+  } else {
+    const rawMsg = r.message || "登录失败";
+    const msg = /network path was not found|ENOTFOUND|ECONN|ETIMEDOUT|UnknownHost|Failed to connect/i.test(rawMsg)
+      ? "连不上复旦统一认证。请确认手机能打开 id.fudan.edu.cn 后再试。"
+      : rawMsg;
+    $("loginErr").textContent = msg;
+    $("loginErr").className = "urgent hint";
+    $("mfaErr").textContent = msg;
+    $("mfaErr").className = "urgent hint";
+  }
+};
+
+let pollRetry = 0;
+function doPoll(fromUser){
+  if (pollBusy || !native()) return;
+  pollBusy = true;
+  pollRequestId = nextRequestId();
+  $("feedTitle").textContent = "正在巡检";
+  setBusy($("pollBtn"), true, "巡检中…");
+  if (fromUser) { pollRetry = 0; toast("开始巡检"); }
+  clearTimeout(pollTimer);
+  pollTimer=setTimeout(()=>{
+    pollRequestId="";pollBusy=false;setBusy($("pollBtn"),false,"立即巡检");
+    $("feedTitle").textContent="巡检超时，未自动重复提交。";
+  },120000);
+  try { Danzhi.poll(pollRequestId); }
+  catch(e){ clearTimeout(pollTimer);pollBusy=false;pollRequestId="";setBusy($("pollBtn"),false,"立即巡检");$("feedTitle").textContent=String(e); }
+}
+window.onPollResult = function(raw){
+  let response;try{response=JSON.parse(raw);}catch(e){$("feedTitle").textContent="巡检结果无法解析";return;}
+  if(!pollRequestId || response.requestId!==pollRequestId)return;
+  pollRequestId="";clearTimeout(pollTimer);
+  pollBusy = false;
+  setBusy($("pollBtn"), false, "立即巡检");
+  try {
+    const r = JSON.parse(raw);
+    if (r.status==="error" && /BUSY/.test(r.message||"") && pollRetry<3){
+      pollRetry += 1;
+      toast("上一件事还在进行，正在自动接着巡检…");
+      setTimeout(()=>doPoll(false), 1600);
+      return;
+    }
+    pollRetry = 0;
+    if (r.status==="error" && lastPoll && lastPoll.items) {
+      $("feedTitle").textContent = lastPoll.items.length + " 条";
+      toast(r.message||"失败");
+      return;
+    }
+    render(r);
+    toast(r.status==="error" ? (r.message||"失败") : r.status==="partial" ? "巡检完成，部分系统仍失败" : "巡检完成");
+  } catch(err) {
+    $("feedTitle").textContent = String(err);
+  }
+};
+function doLogout(){ if (native()) { Danzhi.logout();toast("正在退出…"); } else show("login"); }
+window.onLogout=function(raw){const r=JSON.parse(raw);if(r.status==="ok"){lastPoll=null;$("code").value="";show("login");}else toast(r.message||"退出失败");};
+function keepAlive(){ if (native()) Danzhi.requestKeepAlive(); toast("已请求打开通知设置"); }
+
+function itemWhen(it){
+  const n = Number(it.receivedAt);
+  if (Number.isFinite(n) && n > 0) return n < 1e12 ? n*1000 : n;
+  const raw = it.publishedAt || "";
+  const t = Date.parse(raw);
+  return Number.isFinite(t) ? t : 0;
+}
+function dueMs(it){
+  if (Number(it.dueAtMs) > 0) return Number(it.dueAtMs);
+  const t = Date.parse(it.dueAt || "");
+  return Number.isFinite(t) ? t : 0;
+}
+function isDueSoon(it){
+  if (!(it.kind==="ddl" || it.kind==="exam" || it.kind==="todo")) return false;
+  const d = dueMs(it);
+  if (d) return d > Date.now() && (d - Date.now()) <= 7*24*60*60*1000;
+  if (it.dueOverdue === true || it.dueOverdue === "true") return false;
+  return it.dueSoon === true || it.dueSoon === "true";
+}
+function isOverdue(it){
+  if (!(it.kind==="ddl" || it.kind==="exam" || it.kind==="todo")) return false;
+  if (it.dueOverdue === true || it.dueOverdue === "true") return true;
+  const d = dueMs(it);
+  return d > 0 && d < Date.now();
+}
+function shanghaiParts(t){
+  return Object.fromEntries(new Intl.DateTimeFormat("zh-CN",{
+    timeZone:"Asia/Shanghai", year:"numeric", month:"numeric", day:"numeric",
+    hour:"2-digit", minute:"2-digit", hour12:false
+  }).formatToParts(new Date(t)).filter(p=>p.type!=="literal").map(p=>[p.type,p.value]));
+}
+function formatPolledAt(ms){
+  const n = Number(ms);
+  if (!Number.isFinite(n) || n <= 0) return "";
+  const t = n < 1e12 ? n*1000 : n;
+  const d = shanghaiParts(t), now = shanghaiParts(Date.now());
+  const pad = (x)=>String(x).padStart(2,"0");
+  const hm = pad(d.hour)+":"+pad(d.minute);
+  const same = d.year===now.year && d.month===now.month && d.day===now.day;
+  return same ? ("上次巡检成功 "+hm) : ("上次巡检成功 "+d.month+"月"+d.day+"日 "+hm);
+}
+function formatWhen(it){
+  const ddl = it.kind==="ddl" || it.kind==="exam" || it.kind==="todo";
+  const t = ddl ? (dueMs(it) || itemWhen(it)) : itemWhen(it);
+  if (!t) return "日期未知";
+  const d = shanghaiParts(t), now = shanghaiParts(Date.now());
+  const pad = (n)=>String(n).padStart(2,"0");
+  const hm = pad(d.hour)+":"+pad(d.minute);
+  if (ddl) return "截止 "+d.month+"."+d.day+" "+hm;
+  const same = d.year===now.year && d.month===now.month && d.day===now.day;
+  if (same) return hm;
+  const y = d.year!==now.year ? d.year+"年" : "";
+  const showHm = it.kind==="mail" || !(Number(d.hour)===0 && Number(d.minute)===0);
+  return y+d.month+"月"+d.day+"日"+(showHm?" "+hm:"");
+}
+function sourceLabel(src){ return SOURCE_ZH[src] || src; }
+let selectMode = false;
+const selected = new Set();
+let pressTimer = 0;
+let readerSeq = 0;
+let readerId = "";
+function readSet(){
+  try { return new Set(JSON.parse(localStorage.getItem("dz_read")||"[]")); } catch(e){ return new Set(); }
+}
+function markRead(id){
+  if(!id) return;
+  const s = readSet(); s.add(id);
+  try { localStorage.setItem("dz_read", JSON.stringify([...s])); } catch(e){}
+}
+function isUnread(it){
+  if (readSet().has(it.id)) return false;
+  if (it.unread === true || it.unread === "true") return true;
+  return it.kind === "mail" && it.unread !== false;
+}
+
+let feedFilter = "all";
+$("feedChips").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b || !b.dataset.filter) return;
+  feedFilter = b.dataset.filter;
+  [...$("feedChips").querySelectorAll("button")].forEach(x => x.classList.toggle("on", x===b));
+  if (lastPoll) render(lastPoll);
+};
+
+function render(r){
+  lastPoll = r;
+  if (r.status === "error") { $("feedTitle").textContent = r.message; return; }
+  const trash = r.trash || [];
+  const trashChip = $("trashChip");
+  if (trashChip) trashChip.textContent = trash.length ? ("回收站 "+trash.length) : "回收站";
+  let pool;
+  if (feedFilter === "trash") pool = trash.slice();
+  else {
+    pool = (r.items || []).filter(it => {
+      if (it.trashed) return false;
+      if (feedFilter === "ddl") return it.kind==="ddl" || it.kind==="exam" || it.kind==="todo";
+      if (feedFilter === "mail") return it.source==="mail";
+      if (feedFilter === "soon") return isDueSoon(it);
+      return true;
+    });
+  }
+  const overdue = (feedFilter === "all" || feedFilter === "ddl")
+    ? pool.filter(isOverdue).sort((a,b)=>dueMs(a)-dueMs(b)) : [];
+  const soon = (feedFilter === "all" || feedFilter === "soon")
+    ? pool.filter(isDueSoon).sort((a,b)=>dueMs(a)-dueMs(b)) : [];
+  const specialIds = new Set([...overdue, ...soon].map(it => it.id));
+  let rest = (feedFilter === "all") ? pool.filter(it => !specialIds.has(it.id)) : pool.filter(it => {
+    if (feedFilter === "soon") return isDueSoon(it);
+    if (feedFilter === "ddl") return !isOverdue(it);
+    return true;
+  });
+  if (feedFilter === "ddl" || feedFilter === "soon") rest.sort((a,b)=> (dueMs(a)||1e15) - (dueMs(b)||1e15));
+  else rest.sort((a,b)=>itemWhen(b)-itemWhen(a));
+  const total = overdue.length + soon.length + rest.length;
+  $("feedTitle").textContent = selectMode ? ("已选 "+selected.size) : (feedFilter==="trash" ? (total ? "回收站 "+total : "回收站空") : (total ? total + " 条" : "今日已清"));
+  const meta = $("feedMeta");
+  if (meta) meta.textContent = formatPolledAt(r.polledAt) || "还没有巡检成功";
+  $("setName").textContent = "已登录";
+  const emptyHint = feedFilter==="trash"?"回收站是空的。长按信匣里的一条再点「移入回收站」。"
+    : feedFilter==="soon"?"七天内没有未交的到期作业。"
+    : "过滤后暂无条目。长按一条可多选移入回收站。";
+  let html = "";
+  if (overdue.length) html += `<p class="sec">已逾期未交 · ${overdue.length}</p>` + overdue.map(cardHtml).join("");
+  if (soon.length) html += `<p class="sec">即将到期 · ${soon.length}</p>` + soon.map(cardHtml).join("");
+  if (feedFilter === "all" && (overdue.length || soon.length) && rest.length) html += `<p class="sec">最近</p>`;
+  html += rest.length ? rest.map(cardHtml).join("") : ((overdue.length||soon.length) ? "" : `<p class="hint">${emptyHint}</p>`);
+  $("feedList").innerHTML = html;
+  bindFeed();
+  renderTable(r.courses||[]);
+  const src = r.sources || {};
+  $("health").innerHTML = Object.keys(src).filter(k=>k[0]!=="_").map(k=>{
+    const v = src[k];
+    return `<p style="margin:4px 0">${esc(sourceLabel(k))} · <span class="${v.ok?"ok":"urgent"}">${v.ok ? Number(v.count)+" 条" : esc(v.error||"失败")}</span></p>`;
+  }).join("") || "<p class='hint'>尚无巡检</p>";
+  if (src._qr && src._qr.image) applyQr(src._qr);
+}
+function cardHtml(it){
+  const unread = isUnread(it);
+  const picked = selected.has(it.id);
+  const ddl = it.kind==="ddl" || it.kind==="exam" || it.kind==="todo";
+  const summary = (it.summary && it.summary !== it.title) ? it.summary : "";
+  const due = it.dueLabel || "";
+  return `<article class="card ${unread?"unread":"read"} ${picked?"picked":""} ${ddl?"ddl":""}" data-url="${esc(it.url||"")}" data-id="${esc(it.id||"")}">
+      <span class="stamp">${esc(formatWhen(it))}</span>
+      <div style="display:flex;gap:8px;align-items:baseline">
+        <span class="badge">${selectMode?`<input class="chk" type="checkbox" ${picked?"checked":""} tabindex="-1"> `:""}${esc(sourceLabel(it.source))}${it.kind==="mail"?" · 邮件":""}${ddl?" · 作业":""}${unread?" · 未读":""}${it.trashed?" · 已入回收站":""}</span>
+      </div>
+      <strong style="display:block;margin-top:8px;padding-right:64px">${esc(it.title)}</strong>
+      ${summary?`<p class="hint">${esc(summary)}</p>`:""}
+      ${due?`<p class="due"><i class="due-mark"></i>${esc(due)}</p>`:""}
+      ${it.url?`<button type="button" class="src-link" data-open="${esc(it.url)}">原平台打开</button>`:""}
+    </article>`;
+}
+
+function bindFeed(){
+  const list = $("feedList");
+  list.onpointerdown = (e) => {
+    const art = e.target.closest("article");
+    if (!art || !art.dataset.id) return;
+    clearTimeout(pressTimer);
+    pressTimer = setTimeout(() => { enterSelect(art.dataset.id); }, 500);
+  };
+  list.onpointerup = () => clearTimeout(pressTimer);
+  list.onpointercancel = () => clearTimeout(pressTimer);
+  list.onpointerleave = () => clearTimeout(pressTimer);
+  list.onclick = (e) => {
+    const art = e.target.closest("article");
+    if (!art || !art.dataset.id) return;
+    const src = e.target.closest(".src-link");
+    if (src) {
+      e.preventDefault();
+      e.stopPropagation();
+      openOriginal(src.dataset.open || art.dataset.url);
+      return;
+    }
+    if (selectMode) { toggleSelect(art.dataset.id); return; }
+    openReader(art.dataset.id);
+  };
+  list.oncontextmenu = (e) => {
+    const art = e.target.closest("article");
+    if (!art || !art.dataset.id) return;
+    e.preventDefault();
+    enterSelect(art.dataset.id);
+  };
+}
+
+function findItem(id){
+  const items = (lastPoll && lastPoll.items) || [];
+  const trash = (lastPoll && lastPoll.trash) || [];
+  return items.find(it => it.id === id) || trash.find(it => it.id === id);
+}
+function enterSelect(id){
+  selectMode = true;
+  if (id) selected.add(id);
+  $("selectBar").classList.remove("hidden");
+  if (lastPoll) render(lastPoll);
+}
+function toggleSelect(id){
+  if (selected.has(id)) selected.delete(id); else selected.add(id);
+  if (lastPoll) render(lastPoll);
+}
+function exitSelect(){
+  selectMode = false;
+  selected.clear();
+  $("selectBar").classList.add("hidden");
+  if (lastPoll) render(lastPoll);
+}
+function openReader(id){
+  const it = findItem(id) || { id, title:"正文", summary:"", url:"" };
+  markRead(id);
+  readerId = id;
+  const seq = ++readerSeq;
+  $("reader").classList.remove("hidden");
+  $("readerTitle").textContent = it.title || "正文";
+  $("readerFrame").removeAttribute("src");
+  $("readerFrame").srcdoc = "<p style='font:15px/1.6 sans-serif;padding:16px;color:#6f675c'>载入中…</p>";
+  if (lastPoll) render(lastPoll);
+  if (native()) {
+    try { Danzhi.readItem(id); }
+    catch(e) { if (seq===readerSeq) $("readerFrame").srcdoc = "<p>"+esc(it.summary||String(e))+"</p>"; }
+  } else {
+    $("readerFrame").srcdoc = "<p style='font:16px/1.65 sans-serif;padding:16px'>"+esc(it.summary||"")+"</p>";
+  }
+}
+function closeReader(){
+  readerSeq++;
+  readerId = "";
+  $("reader").classList.add("hidden");
+  $("readerFrame").srcdoc = "";
+  $("readerFrame").removeAttribute("src");
+}
+$("readerBack").onclick = closeReader;
+$("readerOpen").onclick = () => {
+  const it = findItem(readerId);
+  openOriginal((it && it.url) || "");
+};
+function openOriginal(url){
+  if (!url) { toast("没有原平台链接"); return; }
+  if (native()) {
+    try { Danzhi.openUrl(url); }
+    catch(e){ toast(String(e)); }
+  } else {
+    try { window.open(url, "_blank", "noopener"); } catch(e){ toast("无法打开链接"); }
+  }
+}
+function openItem(url){ openOriginal(url); }
+$("selectCancel").onclick = exitSelect;
+$("selectTrash").onclick = () => {
+  if (!selected.size) { toast("先勾选条目"); return; }
+  if (!native()) { toast("请在安装包内操作"); return; }
+  try {
+    const payload = [...selected].map(id => {
+      const it = findItem(id) || ((lastPoll && lastPoll.trash)||[]).find(x=>x.id===id);
+      return it ? {id:it.id, source:it.source||"", mailid:it.mailid||"", mailUid:it.mailUid||0, uidValidity:it.uidValidity||0, title:it.title||""} : {id};
+    });
+    Danzhi.trashItems(JSON.stringify(payload));
+    toast("正在移入回收站…");
+  }
+  catch(e){ toast(String(e)); }
+};
+window.onReadItem = function(raw){
+  let r; try { r=JSON.parse(raw); } catch(e){ $("readerFrame").srcdoc="<p>无法解析正文</p>"; return; }
+  if (r.id && readerId && r.id !== readerId) return;
+  if (r.status==="error") { $("readerFrame").srcdoc = "<p style='padding:16px;color:#8f1d22'>"+esc(r.message||"读取失败")+"</p>"; return; }
+  const html = r.html || ("<p>"+esc(r.summary||r.title||"")+"</p>");
+  $("readerFrame").srcdoc = "<!doctype html><meta charset='utf-8'><style>body{margin:0;padding:18px;font:16px/1.65 'Noto Sans SC',sans-serif;color:#3B2A24;background:#FFF6F0}img{max-width:100%}a{color:#FF6B57}</style>"+html;
+};
+window.onTrashItems = function(raw){
+  let r; try { r=JSON.parse(raw); } catch(e){ toast("回收站操作无法解析"); return; }
+  const picked = [...selected].map(id => {
+    const it = findItem(id);
+    return it ? Object.assign({}, it, {trashed:true}) : {id, trashed:true, title:"已移出", source:"mail"};
+  });
+  if (lastPoll) {
+    if (r.items) lastPoll.items = r.items;
+    else lastPoll.items = (lastPoll.items||[]).filter(it => !selected.has(it.id));
+    if (r.trash) lastPoll.trash = r.trash;
+    else lastPoll.trash = [...picked, ...((lastPoll.trash)||[])];
+  }
+  const n = Number(r.moved||r.removed||0) || picked.length;
+  toast(r.message || ("已移入回收站 "+n+" 条"));
+  feedFilter = "trash";
+  [...$("feedChips").querySelectorAll("button")].forEach(x => x.classList.toggle("on", x.dataset.filter===feedFilter));
+  exitSelect();
+};
+
+function renderTable(courses){
+  const daysEl = $("days");
+  daysEl.innerHTML = [1,2,3,4,5,6,7].map(d =>
+    `<button class="${d===selectedDay?"on":""}" onclick="pickDay(${d})">周${WD[d-1]}${d===jsDay()?"<br><span class='hint'>今天</span>":""}</button>`
+  ).join("");
+  const ofDay = courses.filter(c => Number(c.day)===selectedDay)
+    .sort((a,b)=>a.startPeriod-b.startPeriod);
+  $("tableTitle").textContent = selectedDay===jsDay() ? "今日课表" : `周${WD[selectedDay-1]}`;
+  $("nextBox").innerHTML = nextCard(courses);
+  $("tableList").innerHTML = ofDay.length ? ofDay.map(c => `
+    <article class="card">
+      <p class="hint">${periodLabel(c.startPeriod,c.endPeriod)} · 第${c.startPeriod}${c.endPeriod!==c.startPeriod?"–"+c.endPeriod:""}节</p>
+      <strong>${esc(c.name)}</strong>
+      <p class="hint">${esc([c.location,c.teacher].filter(Boolean).join(" · ")||"地点待更新")}</p>
+    </article>`).join("") : '<p class="hint">这一天没有排课。</p>';
+}
+function pickDay(d){ selectedDay=d; renderTable((lastPoll&&lastPoll.courses)||[]); }
+
+function nextCard(courses){
+  const day = jsDay();
+  const mins = nowMin();
+  const today = (courses||[]).filter(c=>Number(c.day)===day).sort((a,b)=>a.startPeriod-b.startPeriod);
+  let hit=null, state="", left=0;
+  for (const c of today){
+    const a = PERIODS.find(p=>p.n===c.startPeriod);
+    const b = PERIODS.find(p=>p.n===c.endPeriod);
+    if(!a||!b) continue;
+    const s=toMin(a.s), e=toMin(b.e);
+    if (mins < s){ hit=c; state="wait"; left=s-mins; break; }
+    if (mins < e){ hit=c; state="now"; left=e-mins; break; }
+  }
+  if(!hit) return '<div class="card"><p class="hint">今天接下来没有课。</p></div>';
+  const hh=Math.floor(left/60), mm=left%60;
+  const when = hh>0 ? `${hh} 小时 ${mm} 分` : `${mm} 分钟`;
+  const k = state==="now" ? "正在上课，距离下课" : "下节课还有";
+  return `<div class="next"><div class="k">${k}</div>
+    <h2 style="font-size:28px;margin:4px 0 8px">${when}</h2>
+    <p style="margin:0">${esc(hit.name)}</p>
+    <p class="hint" style="color:var(--muted);margin:4px 0 0">${esc(hit.location||"")} ${periodLabel(hit.startPeriod,hit.endPeriod)}</p></div>`;
+}
+
+function refreshQr(force){
+  if (!native()) return;
+  const go = !!force;
+  if (go) {
+    setBusy($("qrBtn"), true, "正在刷新…");
+    $("qrHint").textContent = "已点到。正在向一卡通要新码…";
+    $("qrbox").classList.add("refreshing");
+    $("qrbox").classList.remove("fresh");
+  } else if (!$("qrHint").textContent) {
+    $("qrHint").textContent = "正在更新生活码…";
+  }
+  try {
+    Danzhi.getQr(go ? "1" : "0");
+  }
+  catch(e) {
+    setBusy($("qrBtn"), false, "刷新生活码");
+    $("qrbox").classList.remove("refreshing");
+    $("qrHint").textContent = String(e);
+  }
+}
+window.onQr = function(raw){
+  setBusy($("qrBtn"), false, "刷新生活码");
+  $("qrbox").classList.remove("refreshing");
+  try {
+    const r = JSON.parse(raw);
+    if (r.status==="error" && /BUSY/.test(r.message||"")) {
+      $("qrHint").textContent = "上一件事还在进行，即将自动刷新生活码";
+      setTimeout(()=>{ if (!loginInFlight) refreshQr(true); }, 1200);
+      return;
+    }
+    if (r.status==="error"){ $("qrHint").textContent = r.message||"生活码失败"; $("qrbox").innerHTML='<p class="urgent hint">解码源未拿到。请确认已登录。</p>'; return; }
+    applyQr(r);
+  } catch(e){ $("qrHint").textContent = String(e); }
+};
+function applyQr(r){
+  $("qrbox").classList.remove("fresh");
+  const ts = Number(r.ts)||Date.now();
+  const d = new Date(ts);
+  const hm = String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")+":"+String(d.getSeconds()).padStart(2,"0");
+  const payload = String(r.payload||"");
+  const changed = payload && payload !== window.__qrPayload;
+  if (payload) window.__qrPayload = payload;
+  if (r.image) {
+    $("qrbox").innerHTML = `<img alt="生活码" src="${esc(r.image)}#${ts}" width="220" height="220">
+      <p class="hint" style="margin:10px 0 0;font-weight:700;color:var(--fg)">刷新于 ${hm}${changed?"":" · 码面未轮换"}</p>`;
+  } else {
+    $("qrbox").innerHTML = '<p class="hint">无码</p>';
+  }
+  const bits = [];
+  if (r.balance) bits.push("余额 "+r.balance+" 元");
+  if (r.name) bits.push(r.name);
+  $("qrMeta").textContent = bits.join(" · ");
+  if (r.stale || r.fresh === false) $("qrHint").textContent = "已重新拉取 "+hm+"。闸机码大约 20 秒轮换一次，可再点一次";
+  else if (changed) $("qrHint").textContent = "已更新 "+hm;
+  else $("qrHint").textContent = "已请求新码 "+hm+"。闸机码约 20 秒才换一次，时间戳已更新";
+  requestAnimationFrame(()=> $("qrbox").classList.add("fresh"));
+}
+function doScan(){ if (!native()) return; $("scanMsg").textContent = "打开相机…"; Danzhi.startScan(); }
+window.onScanResult = function(raw){
+  try {
+    const r = JSON.parse(raw);
+    $("scanMsg").textContent = r.message || r.status;
+    $("scanMsg").className = (r.status==="ok"||r.status==="cancelled"||r.status==="confirmation_required") ? "ok hint" : "urgent hint";
+    toast(r.message||"扫码结束");
+  } catch(e){ $("scanMsg").textContent = String(e); }
+};
+
+function loadBuildings(){
+  if (!native()) return;
+  let list=[];
+  try { list = JSON.parse(Danzhi.buildings()); } catch(e){}
+  $("bchips").innerHTML = list.map(b =>
+    `<button data-code="${b.code}" class="${b.code===selectedBuilding?"on":""}">${esc(b.name)}</button>`
+  ).join("");
+  $("bchips").onclick = (e) => {
+    const btn = e.target.closest("button");
+    if(!btn) return;
+    selectedBuilding = btn.dataset.code;
+    [...$("bchips").querySelectorAll("button")].forEach(x=>x.classList.toggle("on", x===btn));
+    queryRooms();
+  };
+}
+let lastRooms = null;
+function currentPeriodN(){
+  const n = nowMin();
+  for (const p of PERIODS){
+    if (n >= toMin(p.s) && n <= toMin(p.e)) return p.n;
+  }
+  for (const p of PERIODS){
+    if (n < toMin(p.s)) return p.n;
+  }
+  return 0;
+}
+function renderRooms(r){
+  lastRooms = r;
+  const rooms = r.rooms||[];
+  const curN = currentPeriodN();
+  $("roomList").innerHTML = (rooms.length ? rooms.map(room => {
+    const busy = room.busy||[];
+    const freeNow = curN ? !busy[curN-1] : (room.freeNow!==false);
+    const slots = PERIODS.map(p => `<i class="${busy[p.n-1]?"busy":""} ${p.n===curN?"now":""}"></i>`).join("");
+    return `<article class="card">
+      <strong>${esc(room.name)}</strong>
+      <span class="badge ${freeNow?"free":"occ"}">${freeNow?"空闲":"占用"}</span>
+      <p class="hint">座位 ${esc(room.seats||"—")}${r.stale?" · 缓存":""}</p>
+      <div class="slots">${slots}</div>
+    </article>`;
+  }).join("") : '<p class="hint">这栋楼没有教室数据。</p>');
+}
+function queryRooms(){
+  if (!native()) return;
+  if (lastRooms && lastRooms.building === selectedBuilding) renderRooms(lastRooms);
+  else $("roomList").innerHTML = '<p class="hint">查询中…</p>';
+  const day = new Date();
+  const ds = `${day.getFullYear()}-${String(day.getMonth()+1).padStart(2,"0")}-${String(day.getDate()).padStart(2,"0")}`;
+  Danzhi.emptyRooms(selectedBuilding, ds);
+}
+window.onRooms = function(raw){
+  try {
+    const r = JSON.parse(raw);
+    if (r.status==="error" && /BUSY/.test(r.message||"")) {
+      if (!(lastRooms && lastRooms.building === selectedBuilding))
+        $("roomList").innerHTML = '<p class="hint">教室查询排队中，马上继续…</p>';
+      setTimeout(queryRooms, 1200);
+      return;
+    }
+    if (r.status==="error"){ $("roomList").innerHTML = `<p class="urgent hint">${esc(r.message)}</p>`; return; }
+    renderRooms(r);
+  } catch(e){ $("roomList").innerHTML = `<p class="urgent hint">${esc(String(e))}</p>`; }
+};
+
+function applySeg(n,persist=true){
+  intervalMin = n;
+  if (persist && native()) Danzhi.setInterval(n);
+  [...$("seg").querySelectorAll("button")].forEach(b => b.classList.toggle("on", Number(b.dataset.min)===n));
+  $("segHint").textContent = `后台间隔 ${n} 分钟；仅主动开启后生效，系统可能延后。`;
+}
+$("seg").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (b) { applySeg(Number(b.dataset.min)); toast(`巡检间隔 ${b.dataset.min} 分钟`); }
+};
+$("mailSave").onclick=()=>{if(native())Danzhi.setMailPassword($("mailPassword").value);};
+window.onMailSettings=raw=>{const r=JSON.parse(raw);$("mailSettingsMsg").textContent=r.message||r.status;if(r.status==="ok")$("mailPassword").value="";};
+$("backgroundEnabled").onchange=()=>{if(native())Danzhi.setBackgroundEnabled($("backgroundEnabled").checked);};
+window.onSettings=raw=>{const r=JSON.parse(raw);$("settingsMsg").textContent=r.message||r.status;};
+$("smsPhone").onchange = () => { if (native()) Danzhi.setSmsPhone($("smsPhone").value.trim()); };
+
+const THEMES = {
+  peach:{bg:"#FFF6F0",elev:"#FFFFFF",surface:"#FFE8DC",fg:"#3B2A24",muted:"#8C7068",subtle:"#B59A92",primary:"#FF7B6A",on:"#FFFFFF",danger:"#FF5A6A",ok:"#5CB87A",busy:"#FF7A7A"},
+  mint:{bg:"#F3FBF5",elev:"#FFFFFF",surface:"#D7F0DF",fg:"#1F3D2B",muted:"#5E7F6A",subtle:"#8AA894",primary:"#3BA56A",on:"#FFFFFF",danger:"#D94848",ok:"#2F8A52",busy:"#E07A7A"},
+  matcha:{bg:"#F4F7F0",elev:"#FFFFFF",surface:"#E3EBD6",fg:"#2C3324",muted:"#6D7A62",subtle:"#97A38A",primary:"#6B8F71",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
+  sky:{bg:"#F3F7FD",elev:"#FFFFFF",surface:"#DCE8FA",fg:"#1E2A44",muted:"#5C6F8C",subtle:"#8A9BB3",primary:"#3D7EEA",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  ocean:{bg:"#F0FAFA",elev:"#FFFFFF",surface:"#D3EFEF",fg:"#163536",muted:"#4E7373",subtle:"#7A9A9A",primary:"#1D9A9A",on:"#FFFFFF",danger:"#D94848",ok:"#2F8A52",busy:"#E07A7A"},
+  grape:{bg:"#F7F3FB",elev:"#FFFFFF",surface:"#E8DFF3",fg:"#2C2438",muted:"#6E6280",subtle:"#9A8EAA",primary:"#7B5EA7",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  rose:{bg:"#FDF4F6",elev:"#FFFFFF",surface:"#F6DDE4",fg:"#3A242C",muted:"#8A6670",subtle:"#B3929A",primary:"#C45C7A",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  sand:{bg:"#FBF6EC",elev:"#FFFFFF",surface:"#F0E4C8",fg:"#3A3120",muted:"#8A7A58",subtle:"#B3A47E",primary:"#C4A35A",on:"#3A3120",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
+  paper:{bg:"#F6F0E6",elev:"#FFFaf3",surface:"#EFE4D4",fg:"#3B2A24",muted:"#8C7068",subtle:"#B59A92",primary:"#C45C4A",on:"#FFFFFF",danger:"#B4232A",ok:"#2F8A52",busy:"#C45C4A"},
+  ink:{bg:"#161412",elev:"#221E1B",surface:"#2C2723",fg:"#F4EDE6",muted:"#B7A79E",subtle:"#8C7C74",primary:"#FF8A76",on:"#1A120F",danger:"#FF7A86",ok:"#7ED09A",busy:"#FF8A76"},
+  blossom:{bg:"#FDF4F7",elev:"#FFFFFF",surface:"#F8DDE6",fg:"#3A2430",muted:"#8A6674",subtle:"#B3929E",primary:"#E88BA8",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  dusk:{bg:"#FBF4EC",elev:"#FFFFFF",surface:"#F3DFC8",fg:"#3A2A1C",muted:"#8A6E54",subtle:"#B39A7E",primary:"#E07A3D",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
+  aurora:{bg:"#F0FAF7",elev:"#FFFFFF",surface:"#D3EFE8",fg:"#16362F",muted:"#4E7368",subtle:"#7A9A90",primary:"#3DB8A0",on:"#FFFFFF",danger:"#D94848",ok:"#2F8A52",busy:"#E07A7A"},
+  lilac:{bg:"#F6F3FB",elev:"#FFFFFF",surface:"#E6DFF3",fg:"#2C2438",muted:"#6E6280",subtle:"#9A8EAA",primary:"#8B7CC9",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  caramel:{bg:"#FBF6F0",elev:"#FFFFFF",surface:"#F0E0D0",fg:"#3A2A20",muted:"#8A6E58",subtle:"#B39A82",primary:"#B56B3A",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
+  bamboo:{bg:"#F3F7F2",elev:"#FFFFFF",surface:"#DCE8D8",fg:"#243028",muted:"#5E7364",subtle:"#8A9A8E",primary:"#4F8F62",on:"#FFFFFF",danger:"#C45C4A",ok:"#2F8A52",busy:"#E07A7A"},
+  cloud:{bg:"#F4F5F7",elev:"#FFFFFF",surface:"#E2E5EA",fg:"#242830",muted:"#5C6570",subtle:"#8A919A",primary:"#6B7380",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  berry:{bg:"#FDF3F5",elev:"#FFFFFF",surface:"#F6D9E0",fg:"#3A2026",muted:"#8A5E68",subtle:"#B38A92",primary:"#C43D5B",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  cream:{bg:"#FFF9EE",elev:"#FFFFFF",surface:"#F5E6C8",fg:"#3A2F1C",muted:"#8A7A58",subtle:"#B3A47E",primary:"#E8C47A",on:"#3A2F1C",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
+  soda:{bg:"#F0F7FD",elev:"#FFFFFF",surface:"#D6EAF8",fg:"#1C2E3A",muted:"#5C7388",subtle:"#8A9BB0",primary:"#5AB0E8",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  milktea:{bg:"#FBF6F1",elev:"#FFFFFF",surface:"#F0E0D4",fg:"#3A2A22",muted:"#8A6E60",subtle:"#B39A8A",primary:"#C48A6A",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
+  moon:{bg:"#F4F6FB",elev:"#FFFFFF",surface:"#E2E7F2",fg:"#242A38",muted:"#5C6578",subtle:"#8A91A4",primary:"#8FA2C4",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  tangerine:{bg:"#FFF6EE",elev:"#FFFFFF",surface:"#F8E0CC",fg:"#3A2A1C",muted:"#8A6E54",subtle:"#B39A7E",primary:"#F08A4B",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
+  lotus:{bg:"#FDF4F8",elev:"#FFFFFF",surface:"#F6DDE8",fg:"#3A2430",muted:"#8A6674",subtle:"#B3929E",primary:"#D98CB3",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  celeste:{bg:"#F2FAF8",elev:"#FFFFFF",surface:"#D5EDE8",fg:"#1C3330",muted:"#5A7A74",subtle:"#8AA8A2",primary:"#6AA8A0",on:"#FFFFFF",danger:"#D94848",ok:"#2F8A52",busy:"#E07A7A"},
+  persimmon:{bg:"#FFF4F0",elev:"#FFFFFF",surface:"#F8D8D0",fg:"#3A241E",muted:"#8A6458",subtle:"#B39288",primary:"#E85D4C",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#E07A7A"},
+  night:{bg:"#1C1524",elev:"#2A2034",surface:"#3A2C48",fg:"#F6EEF6",muted:"#C4B0C8",subtle:"#9A88A4",primary:"#E89AC0",on:"#1C1524",danger:"#FF8A96",ok:"#7ED09A",busy:"#E89AC0"},
+  mist:{bg:"#F3F6FB",elev:"#FFFFFF",surface:"#DEE6F2",fg:"#243044",muted:"#5C6E88",subtle:"#8A9AB0",primary:"#7A90B4",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  strawberry:{bg:"#FFF3F5",elev:"#FFFFFF",surface:"#F8D4DC",fg:"#3A1E24",muted:"#8A5A64",subtle:"#B38A92",primary:"#E24B6A",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  lemon:{bg:"#FFFBEA",elev:"#FFFFFF",surface:"#F4E8B8",fg:"#3A3420",muted:"#8A7A48",subtle:"#B3A46E",primary:"#D6B23A",on:"#3A3420",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
+  taro:{bg:"#F7F3FB",elev:"#FFFFFF",surface:"#E6D8F0",fg:"#2C2438",muted:"#6E6280",subtle:"#9A8EAA",primary:"#9A7AB8",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
+  oat:{bg:"#F8F4EE",elev:"#FFFFFF",surface:"#EBE0D0",fg:"#3A3024",muted:"#8A7A68",subtle:"#B3A494",primary:"#B89A78",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"}
+};
+function applyTheme(name, persist){
+  const t = THEMES[name] || THEMES.peach;
+  const root = document.documentElement;
+  Object.keys(t).forEach(k => root.style.setProperty("--"+k, t[k]));
+  root.style.setProperty("--shadow", name==="ink" ? "0 10px 28px rgba(0,0,0,.35)" : "0 10px 28px rgba(255,107,87,.12)");
+  document.querySelectorAll("#themeChips button").forEach(b => b.classList.toggle("on", b.dataset.theme===name));
+  try { if (persist !== false) localStorage.setItem("dz_theme", name); } catch(e){}
+}
+$("themeChips").onclick = (e) => {
+  const b = e.target.closest("button");
+  if (!b || !b.dataset.theme) return;
+  applyTheme(b.dataset.theme);
+  toast("已换成 "+b.textContent.trim());
+};
+try { applyTheme(localStorage.getItem("dz_theme")||"peach", false); } catch(e) { applyTheme("peach", false); }
+
+document.querySelectorAll(".nav button").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("on"));
+    b.classList.add("on");
+    const tab = b.dataset.tab;
+    ["feed","table","pass","rooms","set"].forEach(k => $(k).classList.toggle("hidden", k!==tab));
+    if (tab==="pass") refreshQr(true);
+    if (tab==="rooms") { loadBuildings(); queryRooms(); }
+    if (tab==="table" && lastPoll) renderTable(lastPoll.courses||[]);
+  };
+});
+
+setInterval(() => { if (lastPoll) renderTable(lastPoll.courses||[]); }, 30000);
+setInterval(() => {
+  if (!$("pass").classList.contains("hidden") && !$("app").classList.contains("hidden")) refreshQr(true);
+}, 25000);
+
+window.danzhiBack = function(){
+  if ($("reader") && !$("reader").classList.contains("hidden")) { closeReader(); return true; }
+  if (selectMode) { exitSelect(); return true; }
+  if ($("mfa") && !$("mfa").classList.contains("hidden")) { show("login"); return true; }
+  const app = $("app");
+  if (app && !app.classList.contains("hidden")) {
+    const on = document.querySelector(".nav button.on");
+    if (on && on.dataset.tab !== "feed") {
+      const feedBtn = document.querySelector('.nav button[data-tab="feed"]');
+      if (feedBtn) feedBtn.click();
+      return true;
+    }
+  }
+  return true;
+};
+let swipeStartX = 0, swipeStartY = 0;
+document.addEventListener("touchstart", (e) => {
+  if (!e.touches || !e.touches[0]) return;
+  swipeStartX = e.touches[0].clientX;
+  swipeStartY = e.touches[0].clientY;
+}, {passive:true});
+document.addEventListener("touchend", (e) => {
+  if (!e.changedTouches || !e.changedTouches[0]) return;
+  const dx = e.changedTouches[0].clientX - swipeStartX;
+  const dy = Math.abs(e.changedTouches[0].clientY - swipeStartY);
+  if (swipeStartX < 56 && dx > 72 && dy < 80) window.danzhiBack();
+}, {passive:true});
+try {
+  history.pushState({danzhi:1}, "");
+  window.addEventListener("popstate", function(){
+    window.danzhiBack();
+    try { history.pushState({danzhi:1}, ""); } catch(e){}
+  });
+} catch(e) {}
+
+try {
+  const savedUser = sessionStorage.getItem("dz_user");
+  if (savedUser) $("user").value = savedUser;
+} catch(e) {}
+
+try {
+  if (native()) {
+    const s = JSON.parse(Danzhi.saved());
+    if (s.username) $("user").value = s.username;
+    intervalMin = s.intervalMin || 15;
+    applySeg(intervalMin,false);
+    $("backgroundEnabled").checked=!!s.backgroundEnabled;
+    if (s.smsPhone) $("smsPhone").value = s.smsPhone;
+    if (s.version) $("setVer").textContent = "版本 " + s.version;
+    if (s.hasSession) show("app");
+    if (s.lastPoll) render(s.lastPoll);
+  }
+} catch(e) {}
+</script>
+</body>
+</html>

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.Danzhi" parent="Theme.MaterialComponents.Light.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="android:statusBarColor">@color/paper</item>
+        <item name="android:navigationBarColor">@color/paper</item>
+        <item name="android:windowBackground">@color/paper</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:forceDarkAllowed">false</item>
+    </style>
+    <style name="Theme.Danzhi.Scan" parent="Theme.Danzhi">
+        <item name="android:windowBackground">#1C1915</item>
+        <item name="android:statusBarColor">@color/primary</item>
+        <item name="android:navigationBarColor">#1C1915</item>
+    </style>
+</resources>
