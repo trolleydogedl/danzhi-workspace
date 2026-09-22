@@ -28,6 +28,8 @@ public class PollService extends JobService {
                     JSONObject result=client.poll();SessionCoordinator.save(this,client,true);return result;
                 });
                 if("error".equals(r.optString("status"))){
+                    String msg=r.optString("message");
+                    if(msg.contains("BUSY")||msg.contains("上一件事")) return;
                     int n=sp.getInt("backgroundFailures",0)+1;sp.edit().putInt("backgroundFailures",n).putString("backgroundError",r.optString("message")).putLong("lastBackgroundPollAt",System.currentTimeMillis()).apply();
                     return;
                 }

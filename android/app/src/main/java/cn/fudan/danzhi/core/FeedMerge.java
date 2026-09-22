@@ -10,6 +10,7 @@ public final class FeedMerge {
     private static final Pattern HW = Pattern.compile("(.+?)作业\\s*[第]?\\s*([0-9０-９]{1,3})");
     private static final Pattern HW_NTH = Pattern.compile("第\\s*([0-9０-９]{1,3})\\s*次");
     private static final Pattern ASG_URL = Pattern.compile("courses/(\\d+)/(?:assignments|quizzes)/(\\d+)");
+    private static final Pattern ASG_ID = Pattern.compile("/assignments/(\\d+)");
     private static final long WEEK_MS = 7L * 24L * 60L * 60L * 1000L;
 
     public static final class Item {
@@ -60,7 +61,9 @@ public final class FeedMerge {
         String t = cleanTitle(title);
         t = t.replaceAll("【[^】]{0,16}】", "");
         t = t.replaceAll("\\[[^\\]]{0,16}]", "");
-        t = t.replaceAll("(?i)^(通知|公告|转发|分享|课堂|作业提醒|作业通知|即将到期|assignment|due)\\s*[:：\\-—]*", "");
+        t = t.replaceAll("(?i)作业链接|作业提醒|作业通知|作业即将到期|即将到期|截止提醒|提交提醒", "");
+        t = t.replaceAll("^[:：\\s\\-—]+", "");
+        t = t.replaceAll("(?i)^(通知|公告|转发|分享|课堂|assignment|due)\\s*[:：\\-—]*", "");
         t = t.replaceAll("（[^）]{0,24}）$", "");
         t = t.replaceAll("\\([^)]{0,24}\\)$", "");
         return t.trim();
@@ -121,7 +124,9 @@ public final class FeedMerge {
     public static String assignmentUrlKey(String url) {
         if (url == null || url.isEmpty()) return "";
         Matcher m = ASG_URL.matcher(url);
-        return m.find() ? (m.group(1) + "/" + m.group(2)) : "";
+        if (m.find()) return m.group(1) + "/" + m.group(2);
+        m = ASG_ID.matcher(url);
+        return m.find() ? ("asg/" + m.group(1)) : "";
     }
 
     /** Stable id for the same homework scraped from planner / calendar / assignments / 作业提醒. */
@@ -132,7 +137,7 @@ public final class FeedMerge {
         t = t.replaceAll("([0-9]{1,3})\\s*次作业", "作业$1");
         Matcher m = HW.matcher(t);
         if (m.find()) {
-            String course = m.group(1).replaceAll("[\\s\\p{Punct}A-Za-z0-9._]+", "");
+            String course = m.group(1).replaceAll("[\\s\\p{Punct}A-Za-z0-9._：、]+", "");
             String num = asciiDigits(m.group(2));
             if (course.length() >= 2) return course + "作业" + num;
             return "作业" + num;
@@ -140,7 +145,7 @@ public final class FeedMerge {
         if (t.contains("作业")) {
             Matcher n = HW_NTH.matcher(t);
             if (n.find()) {
-                String course = t.replaceAll("作业.*", "").replaceAll("第.*", "").replaceAll("[\\s\\p{Punct}A-Za-z0-9._]+", "");
+                String course = t.replaceAll("作业.*", "").replaceAll("第.*", "").replaceAll("[\\s\\p{Punct}A-Za-z0-9._：、]+", "");
                 if (course.length() >= 2) return course + "作业" + asciiDigits(n.group(1));
             }
         }
@@ -175,7 +180,7 @@ public final class FeedMerge {
         String ha = homeworkId(a.title), hb = homeworkId(b.title);
         if (!ha.isEmpty() && ha.equals(hb)) return true;
         String stemA = noticeStem(a.title), stemB = noticeStem(b.title);
-        if (stemA.length() >= 6 && stemA.equals(stemB)
+        if (stemA.length() >= 4 && stemA.equals(stemB)
                 && "elearning".equals(a.source) && "elearning".equals(b.source))
             return true;
         String ga = kindGroup(a.kind), gb = kindGroup(b.kind);

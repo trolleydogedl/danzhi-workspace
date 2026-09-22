@@ -75,7 +75,7 @@ final class SessionCoordinator {
                 live.jar.viaVpn=snap.jar.viaVpn;
             }
             return result;
-        } catch(Exception e){
+        } catch(Throwable e){
             return Diagnostics.error(e);
         }
     }

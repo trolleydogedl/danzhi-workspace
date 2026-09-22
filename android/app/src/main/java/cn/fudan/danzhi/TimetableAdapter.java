@@ -24,6 +24,8 @@ final class TimetableAdapter {
                     +(student.isEmpty()?"":"&studentId="+WebFlow.encode(student)));
             if(!student.isEmpty()){
                 urls.add(FudanClient.FDJWGL+"/student/for-std/course-table/semester/"+semester+"/print-data?studentId="+WebFlow.encode(student));
+                urls.add(FudanClient.FDJWGL+"/student/for-std/course-table/get-data?semesterId="+WebFlow.encode(semester)
+                        +"&studentIds="+WebFlow.encode(student));
             }
             for(String url:urls) {
                 try {
@@ -51,19 +53,31 @@ final class TimetableAdapter {
                     String src=PageParser.attr(scripts.group(1),"src");if(src.isEmpty())continue;
                     String abs=WebFlow.resolve(home.url,src);if(!WebFlow.host(abs).equals("fdjwgl.fudan.edu.cn"))continue;
                     if(!src.toLowerCase(Locale.ROOT).matches(".*(course.?table|timetable).*"))continue;
-                    fetched++;Http.Resp script=Http.follow(jar,abs);WebFlow.requireHttpSuccess(script.flow());endpoint=lessonEndpoint(script.body);
+                    fetched++;
+                    try {
+                        Http.Resp script=Http.fetch(jar,abs,"GET",null,null,12000,home.url);
+                        if(script.code>=200 && script.code<400) endpoint=lessonEndpoint(script.body);
+                    } catch(Exception e){ lastErr=e; }
                 }
             }
             if(!endpoint.isEmpty()&&!student.isEmpty()) {
-                String target=WebFlow.resolve(home.url,endpoint);
-                if(!WebFlow.host(target).equals("fdjwgl.fudan.edu.cn"))throw new WebFlow.FlowException("UNTRUSTED_REDIRECT","课表数据地址不在教务系统");
-                int q=target.indexOf('?');if(q>=0)target=target.substring(0,q);
-                Http.Resp data=Http.follow(jar,target+"?semesterId="+WebFlow.encode(semester)+"&studentId="+WebFlow.encode(student));
-                WebFlow.requireHttpSuccess(data.flow());
-                JSONObject json=asObject(data.body);
-                JSONArray parsed=parse(json);
-                if(parsed.length()>0)return parsed;
-                last=parsed;
+                try {
+                    String target=WebFlow.resolve(home.url,endpoint);
+                    if(!WebFlow.host(target).equals("fdjwgl.fudan.edu.cn"))throw new WebFlow.FlowException("UNTRUSTED_REDIRECT","课表数据地址不在教务系统");
+                    int q=target.indexOf('?');if(q>=0)target=target.substring(0,q);
+                    Http.Resp data=Http.fetch(jar,target+"?semesterId="+WebFlow.encode(semester)+"&studentId="+WebFlow.encode(student),"GET",null,null,15000,home.url);
+                    if(data.code==400||data.code==401||data.code==403){
+                        lastErr=new WebFlow.FlowException("HTTP_ERROR","HTTP "+data.code);
+                    } else if(data.code>=200 && data.code<400) {
+                        JSONObject json=tryObject(data.body);
+                        if(json==null) json=findLessonsObject(data.body);
+                        if(json!=null){
+                            JSONArray parsed=parse(json);
+                            if(parsed.length()>0)return parsed;
+                            last=parsed;
+                        }
+                    }
+                } catch(Exception e){ lastErr=e; }
             }
         }
         try {

@@ -149,12 +149,17 @@ with sync_playwright() as pw:
         assert not e;p.close()
     run('feed mixes sources and sorts newest first with visible dates',feed_dates)
     def far_due():
+        import time
+        now=int(time.time()*1000)
+        soon_due=now+2*86400000
+        far_due_at=now+90*86400000
+        news_at=now-3*3600000
         p,e=page({'version':'test','hasSession':True});p.evaluate('doPoll(true)');rid=calls(p)[0][1]
         p.evaluate('(r)=>onPollResult(JSON.stringify(r))',{'status':'ok','requestId':rid,'courses':[],'sources':{},
             'items':[
-                {'id':'far','source':'elearning','kind':'ddl','title':'三个月后的作业','url':'https://elearning.fudan.edu.cn/a','publishedAt':'2026-08-01T00:00:00+08:00','dueAt':'2026-12-20T23:59:00+08:00','dueLabel':'还剩 91 天'},
-                {'id':'news','source':'jwc','kind':'notice','title':'今日教务通知','url':'https://jwc.fudan.edu.cn/b','publishedAt':'2026-09-20T08:00:00+08:00'},
-                {'id':'soon','source':'elearning','kind':'ddl','title':'两天后的作业','url':'https://elearning.fudan.edu.cn/c','publishedAt':'2026-09-10T00:00:00+08:00','dueAt':'2026-09-22T23:59:00+08:00','dueLabel':'还剩 2 天','dueSoon':True}
+                {'id':'far','source':'elearning','kind':'ddl','title':'三个月后的作业','url':'https://elearning.fudan.edu.cn/a','publishedAt':'2026-08-01T00:00:00+08:00','dueAtMs':far_due_at,'dueAt':'2026-12-20T23:59:00+08:00','dueLabel':'还剩 91 天'},
+                {'id':'news','source':'jwc','kind':'notice','title':'今日教务通知','url':'https://jwc.fudan.edu.cn/b','publishedAt':'2026-09-20T08:00:00+08:00','receivedAt':news_at},
+                {'id':'soon','source':'elearning','kind':'ddl','title':'两天后的作业','url':'https://elearning.fudan.edu.cn/c','publishedAt':'2026-09-10T00:00:00+08:00','dueAtMs':soon_due,'dueSoon':True,'dueLabel':'还剩 2 天'}
             ]})
         text=p.locator('#feedList').inner_text()
         assert text.index('即将到期') < text.index('两天后的作业')
@@ -169,11 +174,13 @@ with sync_playwright() as pw:
         assert '上次巡检成功' in p.locator('#feedMeta').inner_text();assert not e;p.close()
     run('inbox shows last successful inspect time',last_inspect)
     def overdue_not_soon():
+        import time
+        now=int(time.time()*1000)
         p,e=page({'version':'test','hasSession':True});p.evaluate('doPoll(true)');rid=calls(p)[0][1]
-        p.evaluate('(r)=>onPollResult(JSON.stringify(r))',{'status':'ok','requestId':rid,'polledAt':1893456000000,'courses':[],'sources':{},
+        p.evaluate('(r)=>onPollResult(JSON.stringify(r))',{'status':'ok','requestId':rid,'polledAt':now,'courses':[],'sources':{},
             'items':[
-                {'id':'oldhw','source':'elearning','kind':'ddl','title':'九月十日作业','url':'https://elearning.fudan.edu.cn/x','publishedAt':'2026-09-01T00:00:00+08:00','dueAt':'2026-09-10T23:59:00+08:00','dueAtMs':1757520000000,'dueOverdue':True,'dueSoon':True},
-                {'id':'soon','source':'elearning','kind':'ddl','title':'两天后的作业','url':'https://elearning.fudan.edu.cn/c','publishedAt':'2026-09-20T00:00:00+08:00','dueAt':'2026-09-22T23:59:00+08:00','dueSoon':True}
+                {'id':'oldhw','source':'elearning','kind':'ddl','title':'九月十日作业','url':'https://elearning.fudan.edu.cn/x','publishedAt':'2026-09-01T00:00:00+08:00','dueAtMs':now-10*86400000,'dueOverdue':True,'dueSoon':True},
+                {'id':'soon','source':'elearning','kind':'ddl','title':'两天后的作业','url':'https://elearning.fudan.edu.cn/c','publishedAt':'2026-09-20T00:00:00+08:00','dueAtMs':now+2*86400000,'dueSoon':True}
             ]})
         p.locator('#feedChips button[data-filter="soon"]').click()
         text=p.locator('#feedList').inner_text()
@@ -214,6 +221,19 @@ with sync_playwright() as pw:
         assert p.locator('#feedList article').count()==1
         assert not e;p.close()
     run('即将到期 collapses reminder notice and assignment with different urls',soon_dedupe_kinds)
+    def soon_dedupe_link():
+        import time
+        due=int(time.time()*1000)+2*86400000
+        p,e=page({'version':'test','hasSession':True});p.evaluate('doPoll(true)');rid=calls(p)[0][1]
+        p.evaluate('(r)=>onPollResult(JSON.stringify(r))',{'status':'ok','requestId':rid,'courses':[],'sources':{},
+            'items':[
+                {'id':'a','source':'elearning','kind':'ddl','title':'计算方法作业5','url':'https://elearning.fudan.edu.cn/courses/1/assignments/5','dueSoon':True,'dueAtMs':due},
+                {'id':'b','source':'elearning','kind':'ddl','title':'【作业链接】计算方法作业5','url':'https://elearning.fudan.edu.cn/todo/5','dueSoon':True,'dueAtMs':due}
+            ]})
+        p.locator('#feedChips button[data-filter="soon"]').click()
+        assert p.locator('#feedList article').count()==1
+        assert not e;p.close()
+    run('即将到期 collapses 作业链接 and the assignment',soon_dedupe_link)
     def sms_confirm():
         p,e=page({'version':'test','hasSession':True});p.locator('.nav button[data-tab="set"]').click()
         p.locator('#smsPhone').fill('13800138000');p.locator('#smsSave').click()

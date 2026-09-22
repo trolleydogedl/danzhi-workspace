@@ -35,8 +35,8 @@ const SOURCE_ZH: Record<string, string> = {
   timetable: "课表",
 };
 const LOGIN_TIMEOUT_MS = 28000;
-const APK = "/danzhi-1.29.0.apk";
-const APK_NAME = "danzhi-1.29.0.apk";
+const APK = "/danzhi-1.31.0.apk";
+const APK_NAME = "danzhi-1.31.0.apk";
 
 function dueSoon(dueAt?: string): boolean {
   if (!dueAt) return false;
@@ -571,7 +571,7 @@ export function DanzhiApp() {
           className="mt-3 inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline"
         >
           <IconDownload className="size-4" />
-          下载 Android 安装包 1.29.0
+          下载 Android 安装包 1.31.0
         </a>
       </main>
     );
@@ -768,7 +768,7 @@ export function DanzhiApp() {
           <h1 className="mt-1 text-3xl font-bold">
             {profile?.name || profile?.studentId || "已登录"}
           </h1>
-          <p className="mt-1 text-xs text-subtle">版本 1.29.0 · 网页看板</p>
+          <p className="mt-1 text-xs text-subtle">版本 1.31.0 · 网页看板</p>
           <div className="card-shadow mt-4 rounded-2xl bg-elev p-4 text-sm">
             {Object.entries(sources).map(([k, v]) => (
               <p key={k} className="my-1 flex justify-between">

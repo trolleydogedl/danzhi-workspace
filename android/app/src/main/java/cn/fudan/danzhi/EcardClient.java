@@ -40,9 +40,27 @@ final class EcardClient {
 
     static JSONObject fetchQr(FudanClient client, boolean force) throws Exception {
         long now=System.currentTimeMillis();
-        if(!force && lastQr!=null && now-lastQrAt<8_000L) return lastQr;
+        if(!force && lastQr!=null && now-lastQrAt<6_000L) return lastQr;
         if(!inflight.compareAndSet(false,true)){
-            if(now-inflightSince>15_000L){
+            if(force){
+                long until=now+8_000L;
+                while(inflight.get() && System.currentTimeMillis()<until){
+                    try { Thread.sleep(160); } catch(InterruptedException ie){
+                        Thread.currentThread().interrupt();
+                        throw ie;
+                    }
+                }
+                if(!inflight.compareAndSet(false,true)){
+                    if(lastQr!=null){
+                        JSONObject busy=new JSONObject(lastQr.toString());
+                        busy.put("stale", true);
+                        busy.put("fresh", false);
+                        busy.put("message", "上一张还在取，请再点一次刷新");
+                        return busy;
+                    }
+                    throw new WebFlow.FlowException("BUSY","正在取生活码");
+                }
+            } else if(now-inflightSince>15_000L){
                 inflight.set(true);
             } else if(lastQr!=null){
                 JSONObject busy=new JSONObject(lastQr.toString());
@@ -57,6 +75,16 @@ final class EcardClient {
         inflightSince=now;
         try {
             return fetchQrLocked(client, force);
+        } catch (Throwable t) {
+            if (t instanceof WebFlow.FlowException) throw (WebFlow.FlowException) t;
+            if (lastQr != null) {
+                JSONObject stale=new JSONObject(lastQr.toString());
+                stale.put("stale", true);
+                stale.put("fresh", false);
+                stale.put("message", t.getMessage()==null?"取码出错，已保留上一张":t.getMessage());
+                return stale;
+            }
+            throw t instanceof Exception ? (Exception) t : new Exception(t);
         } finally {
             inflight.set(false);
         }
@@ -69,60 +97,42 @@ final class EcardClient {
         String stamp=String.valueOf(System.currentTimeMillis());
         JSONObject got=null;
         String page=QR_URL+"?url=0&_="+stamp;
-        try {
-            Http.Resp resp=Http.follow(client.jar, page, false, Http.UA_WECHAT);
-            if(WebFlow.loginPage(resp.flow()) || hostLooksLikeIdp(resp.url)){
-                sawLogin=true;
-                enterEcard(client);
-                resp=Http.follow(client.jar, page, false, Http.UA_WECHAT);
-            }
-            if(WebFlow.loginPage(resp.flow()) || hostLooksLikeIdp(resp.url)){
-                sawLogin=true;
-                last=new WebFlow.FlowException("AUTH_REQUIRED","一卡通登录未完成，请先巡检或重新登录");
-            } else if(resp.body.contains("btn-agree-ok")){
-                throw new WebFlow.FlowException("CONSENT_REQUIRED","一卡通要求本人确认使用条款；应用不会代替你同意");
-            } else if(WebFlow.host(resp.url).endsWith("fudan.edu.cn")){
+        // DanXi / 官方脚本：普通 GET + iPhone Safari，不要当 Ajax，也不要开 WebView。
+        String[] agents={Http.UA_IPHONE, Http.UA};
+        for(int i=0;i<agents.length && got==null;i++){
+            String ua=agents[i];
+            try {
+                Http.Resp resp=Http.follow(client.jar, page, false, ua);
+                if(WebFlow.loginPage(resp.flow()) || hostLooksLikeIdp(resp.url)){
+                    sawLogin=true;
+                    enterEcard(client);
+                    resp=Http.follow(client.jar, QR_URL+"?url=0&_="+System.currentTimeMillis(), false, ua);
+                }
+                if(WebFlow.loginPage(resp.flow()) || hostLooksLikeIdp(resp.url)){
+                    sawLogin=true;
+                    last=new WebFlow.FlowException("AUTH_REQUIRED","一卡通未登录。请先巡检信匣，或退出后重新登录再开生活码");
+                    continue;
+                }
+                if(resp.body.contains("btn-agree-ok")){
+                    throw new WebFlow.FlowException("CONSENT_REQUIRED","一卡通要求本人确认使用条款；应用不会代替你同意");
+                }
+                if(!WebFlow.host(resp.url).endsWith("fudan.edu.cn")) continue;
                 String payload=payloadOf(resp.body);
                 if(payload.isEmpty()){
                     for(String path:PageParser.qrAjaxPaths(resp.body)){
-                        payload=fetchAjaxQr(client.jar, resp.url, path, stamp, Http.UA);
+                        payload=fetchAjaxQr(client.jar, resp.url, path, stamp, ua);
                         if(!payload.isEmpty()) break;
                     }
                 }
-                if(!payload.isEmpty() && force && payload.equals(previous)){
-                    try { Thread.sleep(1100); } catch(InterruptedException ie){
-                        Thread.currentThread().interrupt();
-                    }
-                    String again=payloadOf(resp.body);
-                    for(String path:PageParser.qrAjaxPaths(resp.body)){
-                        String fresh=fetchAjaxQr(client.jar, resp.url, path, String.valueOf(System.currentTimeMillis()), Http.UA);
-                        if(!fresh.isEmpty() && !fresh.equals(previous)){ payload=fresh; break; }
-                    }
-                    if(again.length()>=8) payload=payload.isEmpty()?again:payload;
-                }
                 if(!payload.isEmpty()) got=packQr(payload, resp.body, force, previous);
-            }
-        } catch(WebFlow.FlowException e){
-            if("CONSENT_REQUIRED".equals(e.category)) throw e;
-            last=e;
-        } catch(Exception e){ last=e; }
+            } catch(WebFlow.FlowException e){
+                if("CONSENT_REQUIRED".equals(e.category)) throw e;
+                last=e;
+            } catch(Exception e){ last=e; }
+        }
         if(got==null){
             JSONObject ajax=tryAjaxFresh(client, stamp, previous);
             if(ajax!=null) got=ajax;
-        }
-        // Hidden WebView used to freeze / crash the app. HTTP + WeChat UA is enough; never spin a WebView.
-        if(got==null && force){
-            try {
-                Http.Resp again=Http.follow(client.jar, QR_URL+"?url=0&fresh=1&_="+System.currentTimeMillis(), false, Http.UA_WECHAT);
-                String payload=payloadOf(again.body);
-                if(payload.isEmpty()){
-                    for(String path:PageParser.qrAjaxPaths(again.body)){
-                        payload=fetchAjaxQr(client.jar, again.url, path, String.valueOf(System.currentTimeMillis()), Http.UA_WECHAT);
-                        if(!payload.isEmpty()) break;
-                    }
-                }
-                if(!payload.isEmpty()) got=packQr(payload, again.body, force, previous);
-            } catch(Exception e){ if(last==null) last=e; }
         }
         if(got!=null){
             if(force) stampQr(got);
@@ -142,7 +152,7 @@ final class EcardClient {
         if(sawLogin) throw new WebFlow.FlowException("AUTH_REQUIRED","一卡通未登录。请先巡检信匣，或退出后重新登录再开生活码");
         if(last!=null)throw last;
         throw new WebFlow.FlowException("QR_SCHEMA_UNVERIFIED",
-            "一卡通页面没有已识别的官方生活码字段。请确认已登录后再点刷新。");
+            "一卡通页面没有已识别的官方生活码字段。请先点信匣「立即巡检」再刷新。");
     }
 
     private static boolean hostLooksLikeIdp(String url) {
@@ -151,24 +161,26 @@ final class EcardClient {
     }
 
     private static void enterEcard(FudanClient client) {
-        String qr=QR_URL;
-        try {
-            Http.Resp hop=client.enterPublic(qr+"?url=0");
-            if(hop!=null && WebFlow.host(hop.url).contains("ecard") && !WebFlow.loginPage(hop.flow()))
-                return;
-        } catch(Exception ignored) {}
+        String qr=QR_URL+"?url=0";
+        String workflow="https://workflow1.fudan.edu.cn/open/connection/index?app_id=c5gI0Ro&state=&redirect_url="+WebFlow.encode(qr);
+        String casLogin="https://workflow1.fudan.edu.cn/site/login/cas-login?redirect_url="+WebFlow.encode(workflow);
         String[] gates={
-            FudanClient.IDP+"/idp/authCenter/authenticate?service="+WebFlow.encode(qr+"?url=0"),
-            FudanClient.IDP+"/authserver/login?service="+WebFlow.encode(qr+"?url=0"),
-            "https://uis.fudan.edu.cn/authserver/login?service="+WebFlow.encode(qr+"?url=0"),
-            qr+"?url=0",
+            qr,
+            FudanClient.IDP+"/idp/authCenter/authenticate?service="+WebFlow.encode(qr),
+            FudanClient.IDP+"/authserver/login?service="+WebFlow.encode(qr),
+            casLogin,
+            FudanClient.IDP+"/idp/authCenter/authenticate?service="+WebFlow.encode(casLogin),
+            "https://uis.fudan.edu.cn/authserver/login?service="+WebFlow.encode(casLogin),
+            workflow,
             EPAY,
             MY,
             "https://ecard.fudan.edu.cn/"
         };
         for(String g:gates){
             try {
-                Http.Resp r=Http.follow(client.jar, g, false, Http.UA);
+                Http.Resp r=g.equals(qr)||g.contains("workflow1")||g.contains("ecard")
+                        ? Http.follow(client.jar, g, false, Http.UA_IPHONE)
+                        : Http.follow(client.jar, g, false, Http.UA);
                 if(r!=null && WebFlow.host(r.url).contains("ecard") && !WebFlow.loginPage(r.flow()))
                     return;
             } catch(Exception ignored) {}
@@ -180,8 +192,11 @@ final class EcardClient {
             EPAY+"/wxpage/fudan/zfm/qrcode/getQr",
             EPAY+"/wxpage/fudan/zfm/getqrcode",
             EPAY+"/wxpage/fudan/zfm/qrcode?ajax=1",
+            EPAY+"/wxpage/fudan/zfm/qrcode/refresh",
             EPAY+"/consume/qrcode",
-            EPAY+"/consume/qrcode/getQr?fresh=1&t="+stamp
+            EPAY+"/consume/qrcode/getQr?fresh=1&t="+stamp,
+            EPAY+"/consume/qrcode/show",
+            EPAY+"/wxpage/fudan/zfm/qrcode?url=0&ajax=1&_="+stamp
         };
         for(String path:ajax){
             String payload=fetchAjaxQr(client.jar, QR_URL, path, stamp, Http.UA_WECHAT);

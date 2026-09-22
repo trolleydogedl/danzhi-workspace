@@ -358,35 +358,37 @@ final class FudanClient {
     private JSONObject fetchElearning() throws Exception {
         Exception last = null;
         JSONObject profileObj = null;
-        for (int attempt = 0; attempt < 3 && profileObj == null; attempt++) {
-            try {
-                enterService(ELEARNING + "/login/cas");
-                Object profile = getJson(ELEARNING + "/api/v1/users/self");
-                if (profile instanceof JSONObject && ((JSONObject) profile).has("id"))
-                    profileObj = (JSONObject) profile;
-                else last = new WebFlow.FlowException("AUTH_REQUIRED", "eLearning 用户身份尚未通过验证");
-            } catch (java.io.IOException e) {
-                last = e;
-                try { Thread.sleep(280L * (attempt + 1)); } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw ie;
-                }
-            } catch (Exception e) {
-                last = e;
-                if (e instanceof WebFlow.FlowException && "AUTH_REQUIRED".equals(((WebFlow.FlowException) e).category) && attempt == 2)
-                    throw e;
-                try { Thread.sleep(180L * (attempt + 1)); } catch (InterruptedException ie) {
-                    Thread.currentThread().interrupt();
-                    throw ie;
-                }
-            }
+        try { enterService(ELEARNING + "/login/cas"); }
+        catch (Exception e) { last = e; }
+        try {
+            Object profile = getJson(ELEARNING + "/api/v1/users/self");
+            if (profile instanceof JSONObject && ((JSONObject) profile).has("id"))
+                profileObj = (JSONObject) profile;
+            else last = new WebFlow.FlowException("AUTH_REQUIRED", "eLearning 用户身份尚未通过验证");
+        } catch (java.io.IOException e) {
+            last = e;
+        } catch (Exception e) {
+            last = e;
         }
-        if (profileObj == null) {
+        JSONArray active = new JSONArray();
+        try {
+            active = getJsonArrayPages(ELEARNING + "/api/v1/courses?enrollment_state=active&per_page=100", 3);
+        } catch (java.io.IOException e) {
+            last = e;
+            try { Thread.sleep(400); } catch (InterruptedException ie) {
+                Thread.currentThread().interrupt();
+                throw ie;
+            }
+            try { active = getJsonArrayPages(ELEARNING + "/api/v1/courses?enrollment_state=active&per_page=50", 2); }
+            catch (Exception e2) { last = e2; }
+        } catch (Exception e) {
+            last = e;
+        }
+        if (profileObj == null && active.length() == 0) {
             if (last instanceof WebFlow.FlowException) throw last;
             if (last != null) throw last;
             throw new WebFlow.FlowException("AUTH_REQUIRED", "eLearning 用户身份尚未通过验证");
         }
-        JSONArray active = getJsonArrayPages(ELEARNING + "/api/v1/courses?enrollment_state=active&per_page=100", 4);
         JSONArray courses = mergeCourses(
                 active,
                 getJsonArrayPagesQuiet(ELEARNING + "/api/v1/courses?enrollment_state=invited_or_pending&per_page=50", 1)
@@ -710,7 +712,7 @@ final class FudanClient {
         for (int i = 0; i < Math.max(1, maxPages) && next != null && seen.add(next); i++) {
             Http.Resp r = null;
             Exception last = null;
-            for (int attempt = 0; attempt < 4 && r == null; attempt++) {
+            for (int attempt = 0; attempt < 2 && r == null; attempt++) {
                 try {
                     r = Http.fetch(jar, next, "GET", null, null, 15000);
                     if (r.code >= 300 && r.code < 400 && r.location != null && !r.location.isEmpty()) {
@@ -1000,30 +1002,65 @@ final class FudanClient {
             try { Http.follow(jar, g, false); } catch (Exception e) { last = e; }
         }
         Http.Resp home=null;
+        String leftover="";
+        String[] homes = { table, table + "/info", sso };
         try {
-            home = Http.follow(jar, table, false);
-            if (WebFlow.loginPage(home.flow()) || home.code == 400 || home.code == 401 || home.code == 403) {
+            for (String u : homes) {
+                try {
+                    Http.Resp hop = Http.follow(jar, u, false);
+                    if (hop == null) continue;
+                    leftover = hop.body == null ? leftover : hop.body;
+                    if (WebFlow.loginPage(hop.flow())) {
+                        last = new WebFlow.FlowException("AUTH_REQUIRED", "课表登录尚未完成");
+                        continue;
+                    }
+                    boolean hasIds = !TimetableText.semesterIdFromHtml(hop.body).isEmpty()
+                            || !TimetableText.studentIdFrom(hop.url, hop.body).isEmpty();
+                    if (hop.code >= 200 && hop.code < 400) {
+                        home = hop;
+                        if (hasIds) break;
+                    } else if (hop.code == 400 && hasIds) {
+                        // 树维偶发对 /course-table 索引返回 400，但正文仍带 semesterId。
+                        home = hop;
+                        break;
+                    } else if (hop.code >= 400) {
+                        last = new WebFlow.FlowException("HTTP_ERROR", "HTTP " + hop.code);
+                    }
+                } catch (Exception e) { last = e; }
+            }
+            if (home == null || WebFlow.loginPage(home.flow())) {
                 try { enterPortal(IDP + "/idp/authCenter/authenticate?service=" + enc(sso)); } catch(Exception e){ last=e; }
-                try { enterPortal(sso); } catch(Exception e){ last=e; }
-                home = Http.follow(jar, table, false);
+                try { Http.follow(jar, sso, false); } catch(Exception e){ last=e; }
+                try {
+                    Http.Resp hop = Http.follow(jar, table + "/info", false);
+                    if (hop != null && !WebFlow.loginPage(hop.flow())) home = hop;
+                } catch (Exception e) { last = e; }
+                if (home == null) home = Http.follow(jar, table, false);
             }
-            String sid = TimetableText.studentIdFrom(home.url, home.body);
-            if (sid.isEmpty() && home.url != null && home.url.contains("/course-table") && !home.url.contains("/info/")) {
+            String sid = home==null?"":TimetableText.studentIdFrom(home.url, home.body);
+            if (sid.isEmpty() && home != null && home.url != null && home.url.contains("/course-table") && !home.url.contains("/info/")) {
                 Http.Resp hop = Http.follow(jar, table + "/info", false);
-                if (hop != null && hop.code < 400 && !WebFlow.loginPage(hop.flow())) home = hop;
+                if (hop != null && !WebFlow.loginPage(hop.flow())
+                        && (hop.code < 400 || !TimetableText.semesterIdFromHtml(hop.body).isEmpty()))
+                    home = hop;
             }
+            if (home == null && leftover != null && !leftover.isEmpty()) {
+                home = new Http.Resp(200, leftover, table, null);
+            }
+            if (home == null) throw last!=null?last:new WebFlow.FlowException("HTTP_ERROR", "课表页无响应");
+            if (WebFlow.loginPage(home.flow()))
+                throw new WebFlow.FlowException("AUTH_REQUIRED", "课表登录尚未完成");
             // Some 树维 deployments answer the landing page with 400 but still include semester HTML.
             if (home.code >= 400 && TimetableText.semesterIdFromHtml(home.body).isEmpty())
-                throw new WebFlow.FlowException("HTTP_ERROR", "课表页 HTTP " + home.code);
-            if (home.code < 400) WebFlow.requireHttpSuccess(home.flow());
+                throw new WebFlow.FlowException("SCHEMA_UNVERIFIED", "课表页 HTTP " + home.code);
         } catch (Exception e) {
             last=e;
             jar.viaVpn = true;
             try { Http.follow(jar, Vpn.LOGIN, false); } catch (Exception ignored) {}
-            try { enterPortal(sso); } catch (Exception ignored) {}
+            try { Http.follow(jar, sso, false); } catch (Exception ignored) {}
             home = Http.follow(jar, table, false);
             if (home.code >= 400 && TimetableText.semesterIdFromHtml(home.body).isEmpty())
-                throw new WebFlow.FlowException("HTTP_ERROR", "课表页 HTTP " + home.code);
+                throw new WebFlow.FlowException("SCHEMA_UNVERIFIED", "课表页 HTTP " + home.code);
             if (home.code < 400) WebFlow.requireHttpSuccess(home.flow());
         }
         try {
@@ -1165,7 +1202,7 @@ final class FudanClient {
 
     private Object getJson(String url) throws Exception {
         Exception last = null;
-        for (int attempt = 0; attempt < 4; attempt++) {
+        for (int attempt = 0; attempt < 2; attempt++) {
             try {
                 Http.Resp r = Http.fetch(jar, url, "GET", null, null, 15000);
                 if (r.code >= 300 && r.code < 400 && r.location != null && !r.location.isEmpty())

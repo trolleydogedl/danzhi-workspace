@@ -47,6 +47,21 @@ public final class WebFlow {
         if(mailHost(h))return true;
         return h.equals("fudan.edu.cn")||h.endsWith(".fudan.edu.cn");
     }
+    /**
+     * XHR is for JSON/CGI endpoints only. The official 生活码 HTML page
+     * ({@code /epay/wxpage/.../qrcode}) fills {@code #myText} as a document;
+     * sending {@code X-Requested-With} yields an empty shell.
+     */
+    public static boolean ajaxHeader(String url) {
+        if(url==null||url.isEmpty())return false;
+        String u=url.toLowerCase(Locale.ROOT);
+        if(u.contains("/cgi-bin/login")||u.contains("t=mail_list.json")||u.contains("t=today.json"))
+            return true;
+        if(u.contains("/api/v1/")||u.contains("/get-data")) return true;
+        if(u.contains("/wxpage/") && u.contains("qrcode"))
+            return u.contains("getqr")||u.contains("getqrcode")||u.contains("/refresh");
+        return u.contains("getqr")||u.contains("/consume/qrcode");
+    }
     /** Student cloud mail is Tencent Exmail; login hops across a few qq.com hosts. */
     public static boolean mailHost(String host) {
         if(host==null||host.isEmpty())return false;

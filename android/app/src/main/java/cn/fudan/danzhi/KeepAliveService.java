@@ -89,12 +89,26 @@ public class KeepAliveService extends Service {
         worker = new Thread(() -> {
             SharedPreferences sp = getSharedPreferences("danzhi", MODE_PRIVATE);
             try {
+                long now0 = System.currentTimeMillis();
+                long lastAt = sp.getLong("lastBackgroundPollAt", 0L);
+                if (lastAt > 0 && now0 - lastAt < 40_000L) {
+                    AlarmReceiver.schedule(this);
+                    return;
+                }
                 JSONObject r = SessionCoordinator.run(this, client -> {
                     JSONObject result = client.poll();
                     SessionCoordinator.save(this, client, true);
                     return result;
                 });
                 long now = System.currentTimeMillis();
+                String msg = r.optString("message");
+                boolean busy = "error".equals(r.optString("status"))
+                        && (msg.contains("BUSY") || msg.contains("上一件事"));
+                if (busy) {
+                    // Foreground poll holds the gate; do not count as a failed inspect.
+                    AlarmReceiver.schedule(this);
+                    return;
+                }
                 if ("error".equals(r.optString("status"))) {
                     int n = sp.getInt("backgroundFailures", 0) + 1;
                     sp.edit().putInt("backgroundFailures", n).putString("backgroundError", r.optString("message"))

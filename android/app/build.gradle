@@ -6,8 +6,8 @@ android {
         applicationId "cn.fudan.danzhi"
         minSdk 26
         targetSdk 34
-        versionCode 30
-        versionName "1.29.0"
+        versionCode 32
+        versionName "1.31.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { buildConfig true }

@@ -267,6 +267,14 @@ public final class CoreTests {
             eq(FeedMerge.collapse(Arrays.asList(a,b,c)).size(),1);
             eq(FeedMerge.homeworkId("【作业提醒】计算方法作业5"),"计算方法作业5");
         });
+        test("homework link notice and assignment collapse",()->{
+            FeedMerge.Item a=new FeedMerge.Item();a.source="elearning";a.kind="ddl";a.title="计算方法作业5";a.url="https://elearning.fudan.edu.cn/courses/1/assignments/5";
+            FeedMerge.Item b=new FeedMerge.Item();b.source="elearning";b.kind="announcement";b.title="【作业链接】计算方法作业5";b.url="https://elearning.fudan.edu.cn/courses/1/discussion_topics/9";
+            FeedMerge.Item c=new FeedMerge.Item();c.source="elearning";c.kind="ddl";c.title="作业链接：计算方法作业5";c.url="https://elearning.fudan.edu.cn/todo/5";
+            eq(FeedMerge.stripDecor("【作业链接】计算方法作业5"),"计算方法作业5");
+            eq(FeedMerge.homeworkId("作业链接：计算方法作业5"),"计算方法作业5");
+            eq(FeedMerge.collapse(Arrays.asList(a,b,c)).size(),1);
+        });
         test("elearning announcement and assignment with same stem collapse",()->{
             FeedMerge.Item a=new FeedMerge.Item();a.source="elearning";a.kind="ddl";a.title="统计学课程论文";
             FeedMerge.Item b=new FeedMerge.Item();b.source="elearning";b.kind="announcement";b.title="【即将到期】统计学课程论文";
@@ -339,6 +347,11 @@ public final class CoreTests {
         });
         test("QR json qrCode field",()->eq(PageParser.qrPayload("{\"qrCode\":\"official-life-code-token\"}"),"official-life-code-token"));
         test("QR json nested data.qrcode",()->eq(PageParser.qrPayloadJson("{\"data\":{\"qrcode\":\"nested-official-qr\"}}"),"nested-official-qr"));
+        test("life-code HTML page is not an XHR document",()->eq(WebFlow.ajaxHeader("https://ecard.fudan.edu.cn/epay/wxpage/fudan/zfm/qrcode?url=0"),false));
+        test("life-code getQr endpoint is XHR",()->eq(WebFlow.ajaxHeader("https://ecard.fudan.edu.cn/epay/wxpage/fudan/zfm/qrcode/getQr"),true));
+        test("consume qrcode endpoint is XHR",()->eq(WebFlow.ajaxHeader("https://ecard.fudan.edu.cn/epay/consume/qrcode"),true));
+        test("print-data is not XHR",()->eq(WebFlow.ajaxHeader("https://fdjwgl.fudan.edu.cn/student/for-std/course-table/semester/1/print-data"),false));
+        test("get-data is XHR",()->eq(WebFlow.ajaxHeader("https://fdjwgl.fudan.edu.cn/student/for-std/course-table/get-data?semesterId=1"),true));
         test("mail json content unescapes html",()->{
             String v=PageParser.mailJsonContent("&&0&&{content:\"<p>hello \\u4e16\\u754c</p>\"}");
             yes(v.contains("hello"));

@@ -23,6 +23,8 @@ final class Http {
     }
     /** Desktop Chrome. Mobile UA makes ecard/ehall 302 into WeChat. */
     static final String UA="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+    /** Official 生活码 H5 is an iPhone Safari page; WeChat UA often returns a mini-program shell. */
+    static final String UA_IPHONE="Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1";
     static final String UA_WECHAT="Mozilla/5.0 (Linux; Android 13; Pixel 7 Build/TQ3A.230805.001; wv) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/116.0.0.0 Mobile Safari/537.36 MMWEBID/4478 MicroMessenger/8.0.44.2502(0x28002C51) WeChat/arm64 NetType/WIFI Language/zh_CN miniProgram/wx9f1c2e7e5a7b3c4d";
     static class Resp {
         final int code;final String body,url,location,link;
@@ -48,27 +50,43 @@ final class Http {
             return new Resp(response.code,response.body,response.url,response.location,response.link);
         }
         IOException lastIo=null;
-        int attempts="POST".equalsIgnoreCase(method)?3:5;
+        int attempts="POST".equalsIgnoreCase(method)?2:4;
+        String originalHost=WebFlow.host(original);
+        boolean elearnHost=originalHost.contains("elearning");
+        if(elearnHost) attempts=5;
         for(int attempt=0;attempt<attempts;attempt++){
             if(attempt>0){
                 try { Thread.sleep(220L*attempt); } catch(InterruptedException ie){ Thread.currentThread().interrupt(); throw ie; }
             }
             try {
-                return fetchOnce(jar,original,target,method,ct,body,timeout,referer,ua,attempt>0);
+                String tryUrl=target;
+                if(attempt>0 && elearnHost && "GET".equalsIgnoreCase(method) && tryUrl.indexOf('#')<0){
+                    tryUrl += (tryUrl.contains("?")?"&":"?")+"_r="+attempt+"&_="+System.currentTimeMillis();
+                }
+                return fetchOnce(jar,original,tryUrl,method,ct,body,timeout,referer,ua,attempt>0 || elearnHost);
             } catch(IOException e){
                 lastIo=e;
-                String m=e.getMessage()==null?"":e.getMessage().toLowerCase(Locale.ROOT);
-                boolean stale=m.contains("unexpected end of stream")||m.contains("connection reset")
-                        ||m.contains("broken pipe")||m.contains("connection closed")||m.contains("software caused connection abort")
-                        ||m.contains("gzip")||e instanceof java.util.zip.ZipException;
-                if(!stale && attempt+1>=attempts) throw e;
-                if(!stale && attempt==0) continue;
+                if(!staleStream(e) && attempt+1>=attempts) throw e;
+                if(!staleStream(e) && attempt==0) continue;
             }
         }
         if(lastIo!=null) throw lastIo;
         throw new IOException("empty http attempt");
     }
+    static boolean staleStream(Throwable e) {
+        for(int i=0;i<6 && e!=null;i++){
+            if(e instanceof java.util.zip.ZipException) return true;
+            String m=e.getMessage()==null?"":e.getMessage().toLowerCase(Locale.ROOT);
+            if(m.contains("unexpected end of stream")||m.contains("connection reset")
+                    ||m.contains("broken pipe")||m.contains("connection closed")
+                    ||m.contains("software caused connection abort")||m.contains("gzip"))
+                return true;
+            e=e.getCause();
+        }
+        return false;
+    }
     private static Resp fetchOnce(CookieJar jar,String original,String target,String method,String ct,String body,int timeout,String referer,String ua,boolean skipGzip) throws Exception {
+        try { System.setProperty("http.keepAlive", "false"); } catch (SecurityException ignored) {}
         HttpURLConnection c=(HttpURLConnection)new URL(target).openConnection();
         try{
             c.setInstanceFollowRedirects(false);c.setConnectTimeout(timeout);c.setReadTimeout(timeout);c.setRequestMethod(method);
@@ -87,20 +105,17 @@ final class Http {
             boolean elearn=originalHost.contains("elearning");
             String accept;
             if(lan) accept="*/*";
-            else if(getData) accept="application/json, text/javascript, */*;q=0.1";
+            else if(getData) accept="application/json, text/javascript, text/html, */*;q=0.1";
             else if(printData || jwgl) accept="text/html,application/xhtml+xml,*/*;q=0.8";
             else if(api) accept="application/json, */*;q=0.8";
             else accept="text/html,application/xhtml+xml,*/*;q=0.8";
             c.setRequestProperty("Accept", accept);
             c.setRequestProperty("Accept-Language","zh-CN,zh;q=0.9");
-            if(!lan && !skipGzip && !elearn && !printData)c.setRequestProperty("Accept-Encoding","gzip");
-            String cookie=jar.headerFor(target);if(!cookie.isEmpty())c.setRequestProperty("Cookie",cookie);
-            if(target.contains("/cgi-bin/login")
-                    || target.contains("t=mail_list.json")
-                    || target.contains("t=today.json")
-                    || target.contains("qrcode") || target.contains("getQr") || target.contains("getqr")){
+            if(elearn || skipGzip) c.setRequestProperty("Accept-Encoding","identity");
+            else if(!lan && !printData) c.setRequestProperty("Accept-Encoding","gzip");
+            if(WebFlow.ajaxHeader(original) || WebFlow.ajaxHeader(target))
                 c.setRequestProperty("X-Requested-With","XMLHttpRequest");
-            }
+            String cookie=jar.headerFor(target);if(!cookie.isEmpty())c.setRequestProperty("Cookie",cookie);
             if(target.contains("/cgi-bin/login")){
                 c.setRequestProperty("Accept","application/json, text/javascript, */*; q=0.01");
             }
@@ -141,7 +156,7 @@ final class Http {
     static Resp follow(CookieJar jar,String url,boolean stopAtLogin,String ua)throws Exception {
         Set<String> hosts=new HashSet<>(Arrays.asList(WebFlow.host(url),"id.fudan.edu.cn","uis.fudan.edu.cn",
             "my.fudan.edu.cn","elearning.fudan.edu.cn","ecard.fudan.edu.cn","fdjwgl.fudan.edu.cn","jwfw.fudan.edu.cn",
-            "ehall.fudan.edu.cn","mail.m.fudan.edu.cn","exmail.qq.com","ptlogin2.qq.com","ssl.ptlogin2.qq.com",
+            "ehall.fudan.edu.cn","workflow1.fudan.edu.cn","mail.m.fudan.edu.cn","exmail.qq.com","ptlogin2.qq.com","ssl.ptlogin2.qq.com",
             "mail.qq.com","w.mail.qq.com","id.qq.com","webvpn.fudan.edu.cn","10.64.130.6"));
         final String agent=ua;
         WebFlow.Response r=WebFlow.follow(req->fetch(jar,req.url,req.method,req.contentType,req.body,req.timeoutMs,null,agent).flow(),
@@ -151,7 +166,7 @@ final class Http {
     static Resp followPost(CookieJar jar,String url,String ct,String body,String referer)throws Exception {
         Set<String> hosts=new HashSet<>(Arrays.asList(WebFlow.host(url),"id.fudan.edu.cn","uis.fudan.edu.cn",
             "my.fudan.edu.cn","elearning.fudan.edu.cn","ecard.fudan.edu.cn","fdjwgl.fudan.edu.cn","jwfw.fudan.edu.cn",
-            "ehall.fudan.edu.cn","mail.m.fudan.edu.cn","exmail.qq.com","ptlogin2.qq.com","ssl.ptlogin2.qq.com",
+            "ehall.fudan.edu.cn","workflow1.fudan.edu.cn","mail.m.fudan.edu.cn","exmail.qq.com","ptlogin2.qq.com","ssl.ptlogin2.qq.com",
             "mail.qq.com","w.mail.qq.com","id.qq.com","webvpn.fudan.edu.cn","10.64.130.6"));
         WebFlow.Response r=WebFlow.follow(req->fetch(jar,req.url,req.method,req.contentType,req.body,req.timeoutMs,referer).flow(),
             new WebFlow.Request(url,"POST",ct,body,18000),false,hosts,false);
