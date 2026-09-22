@@ -11,13 +11,14 @@ with sync_playwright() as pw:
     def page(saved=None):
         p=browser.new_page()
         p.set_default_timeout(3000)
-        p.add_init_script('''window.calls=[];window.Danzhi={
+        p.add_init_script('''window.calls=[];window.__notes='[]';window.Danzhi={
             saved:()=>JSON.stringify(SAVED),
             login:(...a)=>calls.push(['login',...a]), poll:(...a)=>calls.push(['poll',...a]),
             logout:()=>calls.push(['logout']),setInterval:n=>calls.push(['setInterval',n]),
             setMailPassword:s=>calls.push(['setMailPassword',s]),setBackgroundEnabled:b=>calls.push(['background',b]),
             setSmsPhone:s=>calls.push(['smsPhone',s]),getQr:(...a)=>calls.push(['qr',...a]),
             refreshQr:()=>calls.push(['qr','1']),
+            notes:()=>window.__notes||'[]',saveNotes:j=>{window.__notes=j;calls.push(['saveNotes',j]);},
             emptyRooms:(...a)=>calls.push(['rooms',...a]),buildings:()=>"[]",
             startScan:()=>calls.push(['scan']),openUrl:u=>calls.push(['openUrl',u]),requestKeepAlive:()=>calls.push(['notifications']),
             readItem:id=>calls.push(['readItem',id]),trashItems:ids=>calls.push(['trashItems',ids])};
@@ -85,11 +86,12 @@ with sync_playwright() as pw:
         p,e=page({'version':'test','hasSession':True});p.evaluate('doPoll(true)');p.locator('.nav button[data-tab="pass"]').click();
         names=[c[0] for c in calls(p)];assert 'poll' in names and 'qr' in names
         qr=[c for c in calls(p) if c[0]=='qr']
-        assert qr and qr[0][1] in ('1','true',True,1,'True')
+        assert qr and str(qr[0][1]) in ('0','1','true','True','false','False')
         assert not e;p.close()
     run('QR tab still loads during an active poll',qrbusy)
     def qrforce():
         p,e=page({'version':'test','hasSession':True});p.locator('.nav button[data-tab="pass"]').click();
+        p.evaluate('(r)=>onQr(JSON.stringify(r))',{'status':'ok','payload':'fixture-code','image':'data:image/png;base64,aaa'})
         p.evaluate('calls.splice(0)');p.locator('#qrBtn').click();
         c=calls(p);assert c and c[-1][0]=='qr' and str(c[-1][1]) in ('1','true','True')
         assert '已点到' in p.locator('#qrHint').inner_text() or '正在' in p.locator('#qrHint').inner_text()
@@ -97,8 +99,10 @@ with sync_playwright() as pw:
     run('refresh button forces a new campus-code fetch with visible feedback',qrforce)
     def theme_and_source():
         p,e=page({'version':'test','hasSession':True});p.locator('.nav button[data-tab="set"]').click();
-        p.locator('#themeChips button[data-theme="ocean"]').click();
-        assert p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()")=='#1D9A9A'
+        assert p.locator('#themeChips button').count()==6
+        p.locator('#themeChips button[data-theme="glass"]').click();
+        assert p.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()")=='#3D7EEA'
+        assert p.evaluate("document.documentElement.getAttribute('data-style')")=='glass'
         p.locator('.nav button[data-tab="feed"]').click()
         p.evaluate('doPoll(true)');rid=calls(p)[-1][1]
         p.evaluate('(r)=>onPollResult(JSON.stringify(r))',{'status':'ok','requestId':rid,'courses':[],'sources':{},
@@ -107,6 +111,20 @@ with sync_playwright() as pw:
         assert calls(p)[-1]==['openUrl','https://jwc.fudan.edu.cn/x']
         assert not e;p.close()
     run('theme chips change tokens and inbox can open original platform url',theme_and_source)
+    def rooms_current_period():
+        p,e=page({'version':'test','hasSession':True});p.locator('.nav button[data-tab="rooms"]').click();
+        p.evaluate('(r)=>onRooms(JSON.stringify(r))',{'status':'ok','building':'H2','rooms':[
+            {'name':'H2101','seats':'60','busy':[False]*13},
+            {'name':'H2105','seats':'48','busy':[True]*13}]})
+        nows=p.locator('.slots i.now').count()
+        assert nows in (0,2)
+        if nows==2:
+            assert p.locator('article .slots i.now').count()==2
+        borders=p.evaluate("([...document.querySelectorAll('.slots i')].every(i=>{const s=getComputedStyle(i);return s.borderStyle==='none'||s.borderWidth==='0px'}))")
+        assert borders
+        assert '当前这节' in p.locator('#roomList').inner_text()
+        assert not e;p.close()
+    run('classroom slots outline only the current period column',rooms_current_period)
     def settings():
         p,e=page({'version':'test','hasSession':True});p.locator('.nav button[data-tab="set"]').click();p.locator('#seg button[data-min="30"]').click();assert calls(p)==[['setInterval',30]];assert '后台间隔 30' in p.locator('#segHint').inner_text();assert p.locator('#seg button[data-min="30"]').get_attribute('class')=='on';assert not e;p.close()
     run('interval selection has visible selected state and persists once',settings)
@@ -165,9 +183,54 @@ with sync_playwright() as pw:
     run('即将到期 does not list overdue homework from earlier in the month',overdue_not_soon)
     def dan_mark():
         html=(ANDROID/'app/src/main/assets/www/index.html').read_text()
-        assert 'M23 12v22' in html and 'M23 23h18' in html and 'M16 47h32' in html
+        # 日 = two window cells stacked, 一 = a longer thicker bar underneath.
+        assert 'x="23" y="12"' in html and 'x="23" y="26"' in html
+        assert 'x="12" y="46"' in html and 'width="40"' in html
         assert 'rx="1.2"' not in html
     run('app mark is 旦 (two-cell 日 plus 一) not a rounded 口',dan_mark)
+    def soon_dedupe():
+        import time
+        due=int(time.time()*1000)+2*86400000
+        p,e=page({'version':'test','hasSession':True});p.evaluate('doPoll(true)');rid=calls(p)[0][1]
+        p.evaluate('(r)=>onPollResult(JSON.stringify(r))',{'status':'ok','requestId':rid,'courses':[],'sources':{},
+            'items':[
+                {'id':'a','source':'elearning','kind':'ddl','title':'计算方法作业5','url':'https://elearning.fudan.edu.cn/courses/1/assignments/5','dueSoon':True,'dueAtMs':due},
+                {'id':'b','source':'elearning','kind':'ddl','title':'【作业提醒】计算方法作业5','url':'https://elearning.fudan.edu.cn/courses/1/assignments/5','dueSoon':True,'dueAtMs':due}
+            ]})
+        p.locator('#feedChips button[data-filter="soon"]').click()
+        assert p.locator('#feedList article').count()==1
+        assert not e;p.close()
+    run('即将到期 collapses the same assignment shown twice',soon_dedupe)
+    def soon_dedupe_kinds():
+        import time
+        due=int(time.time()*1000)+2*86400000
+        p,e=page({'version':'test','hasSession':True});p.evaluate('doPoll(true)');rid=calls(p)[0][1]
+        p.evaluate('(r)=>onPollResult(JSON.stringify(r))',{'status':'ok','requestId':rid,'courses':[],'sources':{},
+            'items':[
+                {'id':'a','source':'elearning','kind':'ddl','title':'计算方法作业5','url':'https://elearning.fudan.edu.cn/courses/1/assignments/5','dueSoon':True,'dueAtMs':due},
+                {'id':'b','source':'elearning','kind':'ddl','title':'【作业提醒】计算方法作业5','url':'https://elearning.fudan.edu.cn/planner/5','dueSoon':True,'dueAtMs':due}
+            ]})
+        p.locator('#feedChips button[data-filter="soon"]').click()
+        assert p.locator('#feedList article').count()==1
+        assert not e;p.close()
+    run('即将到期 collapses reminder notice and assignment with different urls',soon_dedupe_kinds)
+    def sms_confirm():
+        p,e=page({'version':'test','hasSession':True});p.locator('.nav button[data-tab="set"]').click()
+        p.locator('#smsPhone').fill('13800138000');p.locator('#smsSave').click()
+        assert calls(p)==[['smsPhone','13800138000']]
+        assert '已确认' in p.locator('#smsMsg').inner_text()
+        assert not e;p.close()
+    run('phone number requires an explicit confirm tap',sms_confirm)
+    def notes_crud():
+        p,e=page({'version':'test','hasSession':True});p.locator('.nav button[data-tab="notes"]').click()
+        p.locator('#noteNew').click();p.locator('#noteTitle').fill('闸机提醒');p.locator('#noteBody').fill('明天带卡');p.locator('#noteSave').click()
+        assert p.locator('#noteList').inner_text().find('闸机提醒')>=0
+        p.locator('#noteList article').click();p.locator('#notePinBtn').click();p.locator('#noteSave').click()
+        assert '置顶' in p.locator('#noteList').inner_text()
+        p.locator('#noteList article').click();p.locator('#noteDelete').click()
+        assert '还没有笔记' in p.locator('#noteList').inner_text()
+        assert not e;p.close()
+    run('notes can add pin edit and delete locally',notes_crud)
     browser.close()
 report={'kind':'Chromium UI with recording bridge double; NOT Android WebView','cases':records,'passed':sum(r['status']=='PASS' for r in records),'failed':sum(r['status']=='FAIL' for r in records)}
 (HERE/'reports/ui-tests.json').write_text(json.dumps(report,ensure_ascii=False,indent=2))

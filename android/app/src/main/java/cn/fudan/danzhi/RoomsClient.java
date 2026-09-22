@@ -40,7 +40,7 @@ final class RoomsClient {
         String detailUrl="http://10.64.130.6/?b="+enc(building)+"&c=&p=&day="+enc(day);
         Exception direct=null, vpn=null;
         try {
-            JSONArray rooms=load(new CookieJar(), statusUrl, detailUrl, 1200);
+            JSONArray rooms=load(new CookieJar(), statusUrl, detailUrl, 5000);
             if(rooms.length()>0){
                 JSONObject r=ok(building,day,rooms);
                 lastOk=r; lastAt=System.currentTimeMillis(); lastKey=key;
@@ -114,14 +114,34 @@ final class RoomsClient {
     private static Http.Resp direct(CookieJar jar,String url,int timeout)throws Exception {
         String cur=url;
         Http.Resp r=null;
+        Exception last=null;
         for(int hop=0;hop<5;hop++){
-            r=Http.fetch(jar,cur,"GET",null,null,timeout);
+            int tries=0;
+            while(tries<4){
+                tries++;
+                try {
+                    r=Http.fetch(jar,cur,"GET",null,null,Math.max(timeout, tries*2500));
+                    last=null;
+                    break;
+                } catch(java.io.IOException e){
+                    last=e;
+                    String m=e.getMessage()==null?"":e.getMessage().toLowerCase(java.util.Locale.ROOT);
+                    boolean stale=m.contains("unexpected end of stream")||m.contains("connection reset")
+                            ||m.contains("broken pipe")||m.contains("connection closed");
+                    if(!stale && tries>=2) throw e;
+                    try { Thread.sleep(120L*tries); } catch(InterruptedException ie){
+                        Thread.currentThread().interrupt(); throw ie;
+                    }
+                }
+            }
+            if(r==null && last!=null) throw last;
             if(r.code<300||r.code>=400||r.location==null||r.location.isEmpty())return r;
             String next=WebFlow.resolve(r.url,r.location);
             if(!WebFlow.campusHost(WebFlow.host(next)))
                 throw new WebFlow.FlowException("UNTRUSTED_REDIRECT",WebFlow.safeUrl(next));
             cur=next;
         }
+        if(r==null && last!=null) throw last;
         return r;
     }
 

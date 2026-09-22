@@ -28,10 +28,10 @@ public class PollService extends JobService {
                     JSONObject result=client.poll();SessionCoordinator.save(this,client,true);return result;
                 });
                 if("error".equals(r.optString("status"))){
-                    int n=sp.getInt("backgroundFailures",0)+1;sp.edit().putInt("backgroundFailures",n).putString("backgroundError",r.optString("message")).apply();
+                    int n=sp.getInt("backgroundFailures",0)+1;sp.edit().putInt("backgroundFailures",n).putString("backgroundError",r.optString("message")).putLong("lastBackgroundPollAt",System.currentTimeMillis()).apply();
                     return;
                 }
-                sp.edit().putInt("backgroundFailures",0).remove("backgroundError").putString("lastPoll",r.toString()).apply();
+                sp.edit().putInt("backgroundFailures",0).remove("backgroundError").putString("lastPoll",r.toString()).putLong("lastBackgroundPollAt",System.currentTimeMillis()).apply();
                 KeepAliveService.notifyFresh(this,sp,r);
             }catch(Exception | LinkageError e){
                 sp.edit().putString("backgroundError",Diagnostics.message(e)).apply();

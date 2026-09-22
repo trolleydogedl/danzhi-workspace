@@ -1690,6 +1690,7 @@ export async function fetchCampusQr(cookies: CookieRecord[]): Promise<{
     html.match(/id=["']myText["'][^>]*value=["']([^"']+)["']/)?.[1] ||
     html.match(/value=["']([^"']+)["'][^>]*id=["']myText["']/)?.[1] ||
     html.match(/QRCode\.toCanvas\([^,]+,\s*["']([^"']+)["']/)?.[1] ||
+    html.match(/"(?:qrcode|qrCode|qr_code|myText|code_content)"\s*:\s*"([^"]{8,})"/)?.[1] ||
     "";
   if (!payload) {
     return { status: "error", message: "未从一卡通页解析到生活码。网页端请改用安装包过闸。" };

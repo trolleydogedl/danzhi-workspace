@@ -10,19 +10,35 @@ final class TimetableAdapter {
     private TimetableAdapter() {}
     static JSONArray fetch(CookieJar jar,Http.Resp home) throws Exception {
         String html=home.body;
-        String semester=extractSemester(html),student=field(html,"studentId");
+        String semester=extractSemester(html),student=TimetableText.studentIdFrom(home.url, html);
+        if(student.isEmpty()) student=field(html,"studentId");
         JSONArray last=new JSONArray();
         Exception lastErr=null;
         if(!semester.isEmpty()) {
-            String[] urls={
-                FudanClient.FDJWGL+"/student/for-std/course-table/semester/"+semester+"/print-data",
-                FudanClient.FDJWGL+"/student/for-std/course-table/get-data?semesterId="+WebFlow.encode(semester)
-            };
+            // DanXi uses print-data without extra query; get-data 400s if Accept/params mismatch.
+            java.util.ArrayList<String> urls=new java.util.ArrayList<>();
+            urls.add(FudanClient.FDJWGL+"/student/for-std/course-table/semester/"+semester+"/print-data");
+            urls.add(FudanClient.FDJWGL+"/student/for-std/course-table/get-data?semesterId="+WebFlow.encode(semester)
+                    +(student.isEmpty()?"":"&studentId="+WebFlow.encode(student)));
+            urls.add(FudanClient.FDJWGL+"/student/for-std/course-table/get-data?bizTypeId=2&semesterId="+WebFlow.encode(semester)
+                    +(student.isEmpty()?"":"&studentId="+WebFlow.encode(student)));
+            if(!student.isEmpty()){
+                urls.add(FudanClient.FDJWGL+"/student/for-std/course-table/semester/"+semester+"/print-data?studentId="+WebFlow.encode(student));
+            }
             for(String url:urls) {
                 try {
-                    Http.Resp data=Http.follow(jar,url);
-                    WebFlow.requireHttpSuccess(data.flow());
-                    JSONObject json=asObject(data.body);
+                    Http.Resp data=Http.fetch(jar,url,"GET",null,null,15000,home.url);
+                    if(data.code==400||data.code==401||data.code==403){
+                        lastErr=new WebFlow.FlowException("HTTP_ERROR","HTTP "+data.code);
+                        continue;
+                    }
+                    if(data.code<200||data.code>=400){
+                        lastErr=new WebFlow.FlowException("HTTP_ERROR","HTTP "+data.code);
+                        continue;
+                    }
+                    JSONObject json=tryObject(data.body);
+                    if(json==null) json=findLessonsObject(data.body);
+                    if(json==null) continue;
                     JSONArray parsed=parse(json);
                     if(parsed.length()>0)return parsed;
                     last=parsed;
@@ -50,11 +66,21 @@ final class TimetableAdapter {
                 last=parsed;
             }
         }
+        try {
+            JSONObject embed=findLessonsObject(html);
+            if(embed!=null){
+                JSONArray parsed=parse(embed);
+                if(parsed.length()>0)return parsed;
+                last=parsed;
+            }
+        } catch(Exception ignored) {}
         if(last.length()>0)return last;
         if(semester.isEmpty())throw new WebFlow.FlowException("SCHEMA_UNVERIFIED",
             "课表页未提供当前 semesterId；未猜测学期");
-        if(lastErr instanceof WebFlow.FlowException)throw lastErr;
-        throw new WebFlow.FlowException("SCHEMA_UNVERIFIED","课表接口未返回 lessons / activities");
+        if(lastErr instanceof WebFlow.FlowException && !"HTTP_ERROR".equals(((WebFlow.FlowException)lastErr).category))
+            throw lastErr;
+        throw new WebFlow.FlowException("SCHEMA_UNVERIFIED",
+            lastErr==null?"课表接口未返回 lessons / activities":("课表数据未取到："+lastErr.getMessage()));
     }
     static String extractSemester(String html) {
         return TimetableText.semesterIdFromHtml(html);
@@ -68,11 +94,40 @@ final class TimetableAdapter {
         return m.find()?m.group(1):"";
     }
     static JSONObject asObject(String body) throws Exception {
-        if(body==null)throw new WebFlow.FlowException("SCHEMA_UNVERIFIED","课表接口未返回 JSON 对象");
+        JSONObject o=tryObject(body);
+        if(o==null)throw new WebFlow.FlowException("SCHEMA_UNVERIFIED","课表接口未返回 JSON 对象");
+        return o;
+    }
+    static JSONObject tryObject(String body) {
+        if(body==null)return null;
         String t=body.trim();
         if(t.startsWith("while(1);")) t=t.substring("while(1);".length()).trim();
-        if(!t.startsWith("{"))throw new WebFlow.FlowException("SCHEMA_UNVERIFIED","课表接口未返回 JSON 对象");
-        return new JSONObject(t);
+        if(!t.startsWith("{"))return null;
+        try { return new JSONObject(t); } catch(Exception e){ return null; }
+    }
+    static JSONObject findLessonsObject(String html) {
+        if(html==null||html.isEmpty())return null;
+        JSONObject direct=tryObject(html);
+        if(direct!=null && (direct.has("lessons")||direct.has("activities")||direct.has("studentTableVms")||direct.has("data")))
+            return direct;
+        int idx=html.indexOf("\"lessons\"");
+        if(idx<0) idx=html.indexOf("\"activities\"");
+        if(idx<0) idx=html.indexOf("\"studentTableVms\"");
+        if(idx<0) return null;
+        int start=html.lastIndexOf('{', idx);
+        if(start<0) return null;
+        int depth=0;
+        for(int i=start;i<html.length() && i<start+800000;i++){
+            char c=html.charAt(i);
+            if(c=='{') depth++;
+            else if(c=='}'){
+                depth--;
+                if(depth==0){
+                    return tryObject(html.substring(start,i+1));
+                }
+            }
+        }
+        return null;
     }
     static JSONArray parse(JSONObject json) throws Exception {
         if(json==null)throw new WebFlow.FlowException("SCHEMA_UNVERIFIED","空课表响应");

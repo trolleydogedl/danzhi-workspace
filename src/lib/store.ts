@@ -15,7 +15,7 @@ import { DEFAULT_WEEK_START } from "./fudan/periods";
 import { applyFilter } from "./fudan/filter";
 import { buildDemoItems, DEMO_COURSES, DEMO_PROFILE } from "./fudan/demo-data";
 
-export type TabId = "feed" | "table" | "pass" | "rooms" | "settings";
+export type TabId = "feed" | "table" | "pass" | "rooms" | "notes" | "settings";
 export type Phase = "boot" | "login" | "mfa" | "app";
 
 type AppState = {

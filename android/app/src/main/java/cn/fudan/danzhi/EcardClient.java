@@ -18,6 +18,7 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.util.EnumMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -28,69 +29,100 @@ final class EcardClient {
     static final String SCAN_PAGE = "https://ecard.fudan.edu.cn/epay/wxpage/fudan/zfm/scanqrcode";
     static volatile JSONObject lastQr;
     static volatile long lastQrAt;
+    private static final AtomicBoolean inflight=new AtomicBoolean();
+    private static volatile long inflightSince;
+    interface BrowserHook { JSONObject fetch(FudanClient client) throws Exception; }
+    static volatile BrowserHook browser;
 
     static JSONObject fetchQr(FudanClient client) throws Exception {
         return fetchQr(client, false);
     }
 
     static JSONObject fetchQr(FudanClient client, boolean force) throws Exception {
-        if(!force && lastQr!=null && System.currentTimeMillis()-lastQrAt<2_000L) return lastQr;
-        String previous= lastQr==null?"":lastQr.optString("payload");
-        if(force){ lastQrAt=0; }
-        Exception last=null;
-        String stamp=String.valueOf(System.currentTimeMillis());
-        if(force){
-            try { Http.follow(client.jar, "https://ecard.fudan.edu.cn/", false, Http.UA); } catch(Exception ignored) {}
-            try {
-                Http.follow(client.jar, FudanClient.IDP+"/authserver/login?service="+WebFlow.encode(QR_URL), false, Http.UA);
-            } catch(Exception ignored) {}
+        long now=System.currentTimeMillis();
+        if(!force && lastQr!=null && now-lastQrAt<8_000L) return lastQr;
+        if(!inflight.compareAndSet(false,true)){
+            if(now-inflightSince>15_000L){
+                inflight.set(true);
+            } else if(lastQr!=null){
+                JSONObject busy=new JSONObject(lastQr.toString());
+                busy.put("stale", true);
+                busy.put("fresh", false);
+                busy.put("message", "正在取码，沿用上一张");
+                return busy;
+            } else {
+                throw new WebFlow.FlowException("BUSY","正在取生活码");
+            }
         }
+        inflightSince=now;
         try {
-            Http.follow(client.jar, EPAY, false, Http.UA);
-        } catch(Exception ignored) {}
-        JSONObject got=null;
-        String[] pages={
-            QR_URL+(QR_URL.contains("?")?"&":"?")+"_="+stamp+"&nocache=1&r="+stamp,
-            QR_URL+"?url=0&_="+stamp,
-            QR_URL
-        };
-        String[] agents={ Http.UA_WECHAT, Http.UA_WECHAT, Http.UA };
-        int rounds=force?4:1;
-        for(int round=0; round<rounds; round++){
-            if(round>0){
-                try { Thread.sleep(700); } catch(InterruptedException ie){ Thread.currentThread().interrupt(); }
-                stamp=String.valueOf(System.currentTimeMillis());
-            }
-            for(int i=0;i<pages.length;i++){
-                try {
-                    String page=pages[i];
-                    if(round>0 && page.contains("_=")) page=page.replaceAll("_=\\d+","_="+stamp).replaceAll("r=\\d+","r="+stamp);
-                    Http.Resp resp=Http.follow(client.jar, page, false, agents[i]);
-                    if(WebFlow.loginPage(resp.flow()))continue;
-                    if(!WebFlow.host(resp.url).endsWith("fudan.edu.cn"))continue;
-                    if(resp.body.contains("btn-agree-ok"))
-                        throw new WebFlow.FlowException("CONSENT_REQUIRED","一卡通要求本人确认使用条款；应用不会代替你同意");
-                    String payload=payloadOf(resp.body);
-                    if(payload.isEmpty()){
-                        for(String path:PageParser.qrAjaxPaths(resp.body)){
-                            payload=fetchAjaxQr(client.jar, resp.url, path, stamp, agents[i]);
-                            if(!payload.isEmpty()) break;
-                        }
-                    }
-                    if(payload.isEmpty()) continue;
-                    JSONObject o=packQr(payload, resp.body, force, previous);
-                    got=o;
-                    if(!force || !payload.equals(previous)) break;
-                } catch(WebFlow.FlowException e){
-                    if("CONSENT_REQUIRED".equals(e.category))throw e;
-                    last=e;
-                } catch(Exception e){ last=e; }
-            }
-            if(got!=null && (!force || !previous.equals(got.optString("payload")))) break;
+            return fetchQrLocked(client, force);
+        } finally {
+            inflight.set(false);
         }
+    }
+
+    private static JSONObject fetchQrLocked(FudanClient client, boolean force) throws Exception {
+        String previous= lastQr==null?"":lastQr.optString("payload");
+        Exception last=null;
+        boolean sawLogin=false;
+        String stamp=String.valueOf(System.currentTimeMillis());
+        JSONObject got=null;
+        String page=QR_URL+"?url=0&_="+stamp;
+        try {
+            Http.Resp resp=Http.follow(client.jar, page, false, Http.UA_WECHAT);
+            if(WebFlow.loginPage(resp.flow()) || hostLooksLikeIdp(resp.url)){
+                sawLogin=true;
+                enterEcard(client);
+                resp=Http.follow(client.jar, page, false, Http.UA_WECHAT);
+            }
+            if(WebFlow.loginPage(resp.flow()) || hostLooksLikeIdp(resp.url)){
+                sawLogin=true;
+                last=new WebFlow.FlowException("AUTH_REQUIRED","一卡通登录未完成，请先巡检或重新登录");
+            } else if(resp.body.contains("btn-agree-ok")){
+                throw new WebFlow.FlowException("CONSENT_REQUIRED","一卡通要求本人确认使用条款；应用不会代替你同意");
+            } else if(WebFlow.host(resp.url).endsWith("fudan.edu.cn")){
+                String payload=payloadOf(resp.body);
+                if(payload.isEmpty()){
+                    for(String path:PageParser.qrAjaxPaths(resp.body)){
+                        payload=fetchAjaxQr(client.jar, resp.url, path, stamp, Http.UA);
+                        if(!payload.isEmpty()) break;
+                    }
+                }
+                if(!payload.isEmpty() && force && payload.equals(previous)){
+                    try { Thread.sleep(1100); } catch(InterruptedException ie){
+                        Thread.currentThread().interrupt();
+                    }
+                    String again=payloadOf(resp.body);
+                    for(String path:PageParser.qrAjaxPaths(resp.body)){
+                        String fresh=fetchAjaxQr(client.jar, resp.url, path, String.valueOf(System.currentTimeMillis()), Http.UA);
+                        if(!fresh.isEmpty() && !fresh.equals(previous)){ payload=fresh; break; }
+                    }
+                    if(again.length()>=8) payload=payload.isEmpty()?again:payload;
+                }
+                if(!payload.isEmpty()) got=packQr(payload, resp.body, force, previous);
+            }
+        } catch(WebFlow.FlowException e){
+            if("CONSENT_REQUIRED".equals(e.category)) throw e;
+            last=e;
+        } catch(Exception e){ last=e; }
         if(got==null){
             JSONObject ajax=tryAjaxFresh(client, stamp, previous);
             if(ajax!=null) got=ajax;
+        }
+        // Hidden WebView used to freeze / crash the app. HTTP + WeChat UA is enough; never spin a WebView.
+        if(got==null && force){
+            try {
+                Http.Resp again=Http.follow(client.jar, QR_URL+"?url=0&fresh=1&_="+System.currentTimeMillis(), false, Http.UA_WECHAT);
+                String payload=payloadOf(again.body);
+                if(payload.isEmpty()){
+                    for(String path:PageParser.qrAjaxPaths(again.body)){
+                        payload=fetchAjaxQr(client.jar, again.url, path, String.valueOf(System.currentTimeMillis()), Http.UA_WECHAT);
+                        if(!payload.isEmpty()) break;
+                    }
+                }
+                if(!payload.isEmpty()) got=packQr(payload, again.body, force, previous);
+            } catch(Exception e){ if(last==null) last=e; }
         }
         if(got!=null){
             if(force) stampQr(got);
@@ -104,24 +136,52 @@ final class EcardClient {
             stale.put("stale", true);
             stale.put("fresh", false);
             stale.put("ts", System.currentTimeMillis());
-            if(force) stampQr(stale);
             stale.put("message", last==null?"已重新请求，码尚未轮换时可再点一次":last.getMessage());
             return stale;
         }
+        if(sawLogin) throw new WebFlow.FlowException("AUTH_REQUIRED","一卡通未登录。请先巡检信匣，或退出后重新登录再开生活码");
         if(last!=null)throw last;
         throw new WebFlow.FlowException("QR_SCHEMA_UNVERIFIED",
-            "一卡通页面没有已识别的官方生活码字段；这不是已验证可用的门禁码");
+            "一卡通页面没有已识别的官方生活码字段。请确认已登录后再点刷新。");
+    }
+
+    private static boolean hostLooksLikeIdp(String url) {
+        String h=WebFlow.host(url);
+        return "id.fudan.edu.cn".equals(h) || "uis.fudan.edu.cn".equals(h);
+    }
+
+    private static void enterEcard(FudanClient client) {
+        String qr=QR_URL;
+        try {
+            Http.Resp hop=client.enterPublic(qr+"?url=0");
+            if(hop!=null && WebFlow.host(hop.url).contains("ecard") && !WebFlow.loginPage(hop.flow()))
+                return;
+        } catch(Exception ignored) {}
+        String[] gates={
+            FudanClient.IDP+"/idp/authCenter/authenticate?service="+WebFlow.encode(qr+"?url=0"),
+            FudanClient.IDP+"/authserver/login?service="+WebFlow.encode(qr+"?url=0"),
+            "https://uis.fudan.edu.cn/authserver/login?service="+WebFlow.encode(qr+"?url=0"),
+            qr+"?url=0",
+            EPAY,
+            MY,
+            "https://ecard.fudan.edu.cn/"
+        };
+        for(String g:gates){
+            try {
+                Http.Resp r=Http.follow(client.jar, g, false, Http.UA);
+                if(r!=null && WebFlow.host(r.url).contains("ecard") && !WebFlow.loginPage(r.flow()))
+                    return;
+            } catch(Exception ignored) {}
+        }
     }
 
     private static JSONObject tryAjaxFresh(FudanClient client, String stamp, String previous) {
         String[] ajax={
-            EPAY+"/consume/qrcode",
-            EPAY+"/wxpage/fudan/zfm/qrcode",
+            EPAY+"/wxpage/fudan/zfm/qrcode/getQr",
             EPAY+"/wxpage/fudan/zfm/getqrcode",
-            EPAY+"/wxpage/fudan/zfm/refreshqrcode",
-            EPAY+"/consume/qrcode/getQr?fresh=1&t="+stamp,
-            EPAY+"/consume/qrcode/refresh?t="+stamp,
-            EPAY+"/order/qrcode"
+            EPAY+"/wxpage/fudan/zfm/qrcode?ajax=1",
+            EPAY+"/consume/qrcode",
+            EPAY+"/consume/qrcode/getQr?fresh=1&t="+stamp
         };
         for(String path:ajax){
             String payload=fetchAjaxQr(client.jar, QR_URL, path, stamp, Http.UA_WECHAT);
@@ -136,7 +196,8 @@ final class EcardClient {
         JSONObject o=new JSONObject();
         o.put("status","ok");
         o.put("payload",payload);
-        o.put("image",toPng(payload, force));
+        try { o.put("image",toPng(payload, force)); }
+        catch(Throwable t){ o.put("image",""); o.put("message","码已取到，绘制失败时可再点刷新"); }
         o.put("balance",extractBalanceFrom(html));
         o.put("name",extractName(html));
         o.put("ts",System.currentTimeMillis());
@@ -153,19 +214,20 @@ final class EcardClient {
             String ajax=path.startsWith("http")?path:WebFlow.resolve(referer, path);
             if(!WebFlow.host(ajax).endsWith("fudan.edu.cn")) return "";
             String sep=ajax.contains("?")?"&":"?";
-            Http.Resp aj=Http.fetch(jar, ajax+sep+"_="+stamp+"&nocache=1&fresh=1", "GET", null, null, 8000, referer, ua);
+            Http.Resp aj=Http.fetch(jar, ajax+sep+"_="+stamp+"&nocache=1&fresh=1", "GET", null, null, 3500, referer, ua);
             String payload=payloadOf(aj.body);
             if(!payload.isEmpty()) return payload;
             aj=Http.fetch(jar, ajax, "POST", "application/x-www-form-urlencoded",
-                    "aaxmlrequest=true&fresh=1&_="+stamp+"&t="+stamp, 8000, referer, ua);
+                    "aaxmlrequest=true&fresh=1&_="+stamp+"&t="+stamp, 3500, referer, ua);
             return payloadOf(aj.body);
         } catch(Exception ignored) { return ""; }
     }
 
     private static String payloadOf(String body) {
         String p=PageParser.qrPayload(body);
-        if(!p.isEmpty()) return p;
-        return PageParser.qrPayloadJson(body);
+        if(p.isEmpty()) p=PageParser.qrPayloadJson(body);
+        if(p.length()<8 || p.length()>768) return "";
+        return p;
     }
 
     static JSONObject scan(FudanClient client, String qr) throws Exception {
@@ -211,30 +273,36 @@ final class EcardClient {
         hints.put(EncodeHintType.CHARACTER_SET, "UTF-8");
         hints.put(EncodeHintType.MARGIN, 1);
         hints.put(EncodeHintType.ERROR_CORRECTION, ErrorCorrectionLevel.M);
-        BitMatrix matrix = new QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, 480, 480, hints);
+        BitMatrix matrix = new QRCodeWriter().encode(payload, BarcodeFormat.QR_CODE, 200, 200, hints);
         int w = matrix.getWidth();
         int h = matrix.getHeight();
-        int extra = stamp ? 44 : 0;
-        Bitmap bmp = Bitmap.createBitmap(w, h + extra, Bitmap.Config.ARGB_8888);
-        android.graphics.Canvas canvas = new android.graphics.Canvas(bmp);
-        canvas.drawColor(Color.WHITE);
+        int extra = stamp ? 36 : 0;
+        Bitmap bmp = Bitmap.createBitmap(w, h + extra, Bitmap.Config.RGB_565);
         int dark = Color.parseColor("#0B1020");
+        int[] pixels = new int[w * h];
         for (int y = 0; y < h; y++) {
-            for (int x = 0; x < w; x++) {
-                if (matrix.get(x, y)) bmp.setPixel(x, y, dark);
-            }
+            int row = y * w;
+            for (int x = 0; x < w; x++) pixels[row + x] = matrix.get(x, y) ? dark : Color.WHITE;
+        }
+        bmp.setPixels(pixels, 0, w, 0, 0, w, h);
+        android.graphics.Canvas canvas = new android.graphics.Canvas(bmp);
+        if (extra > 0) {
+            android.graphics.Paint bg = new android.graphics.Paint();
+            bg.setColor(Color.WHITE);
+            canvas.drawRect(0, h, w, h + extra, bg);
         }
         if (stamp) {
             android.graphics.Paint paint = new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
             paint.setColor(Color.parseColor("#3B2A24"));
-            paint.setTextSize(28);
+            paint.setTextSize(22);
             paint.setTextAlign(android.graphics.Paint.Align.CENTER);
             java.text.SimpleDateFormat fmt = new java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.CHINA);
             fmt.setTimeZone(java.util.TimeZone.getTimeZone("Asia/Shanghai"));
-            canvas.drawText("已刷新 "+fmt.format(new java.util.Date()), w/2f, h + 32, paint);
+            canvas.drawText("已刷新 "+fmt.format(new java.util.Date()), w/2f, h + 26, paint);
         }
         ByteArrayOutputStream baos = new ByteArrayOutputStream();
-        bmp.compress(Bitmap.CompressFormat.PNG, 100, baos);
+        bmp.compress(Bitmap.CompressFormat.PNG, 90, baos);
+        bmp.recycle();
         return "data:image/png;base64," + Base64.encodeToString(baos.toByteArray(), Base64.NO_WRAP);
     }
 }

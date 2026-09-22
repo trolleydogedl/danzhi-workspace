@@ -12,6 +12,8 @@ import android.provider.Settings;
 import android.graphics.Color;
 import android.view.View;
 import android.webkit.*;
+import android.webkit.ValueCallback;
+import android.webkit.WebChromeClient;
 import androidx.activity.OnBackPressedCallback;
 import androidx.activity.result.ActivityResultLauncher;
 import androidx.activity.result.contract.ActivityResultContracts;
@@ -26,6 +28,8 @@ public class MainActivity extends AppCompatActivity {
     private SharedPreferences sp;
     private WebView web;
     private ActivityResultLauncher<Intent> scanLauncher;
+    private ActivityResultLauncher<Intent> fileLauncher;
+    private ValueCallback<Uri[]> fileCallback;
     private volatile boolean destroyed;
 
     @Override protected void onCreate(Bundle state) {
@@ -35,14 +39,32 @@ public class MainActivity extends AppCompatActivity {
         web=new WebView(this);web.setBackgroundColor(Color.parseColor("#FFF6F0"));setContentView(web);
         web.setOverScrollMode(View.OVER_SCROLL_NEVER);
         WebSettings s=web.getSettings();s.setJavaScriptEnabled(true);s.setDomStorageEnabled(true);
-        s.setAllowFileAccess(true);s.setAllowFileAccessFromFileURLs(false);s.setAllowUniversalAccessFromFileURLs(false);
+        s.setAllowFileAccess(true);s.setAllowContentAccess(true);s.setAllowFileAccessFromFileURLs(false);s.setAllowUniversalAccessFromFileURLs(false);
         s.setBlockNetworkLoads(true);s.setSaveFormData(false);
         web.setWebViewClient(new WebViewClient(){
             @Override public boolean shouldOverrideUrlLoading(WebView v,WebResourceRequest r){return !r.getUrl().toString().startsWith("file:///android_asset/www/");}
         });
+        web.setWebChromeClient(new WebChromeClient(){
+            @Override public boolean onShowFileChooser(WebView w, ValueCallback<Uri[]> cb, FileChooserParams params){
+                if(fileCallback!=null) fileCallback.onReceiveValue(null);
+                fileCallback=cb;
+                Intent intent=params.createIntent();
+                intent.addCategory(Intent.CATEGORY_OPENABLE);
+                intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
+                try {
+                    fileLauncher.launch(Intent.createChooser(intent, "选择附件"));
+                    return true;
+                } catch(RuntimeException e){
+                    fileCallback=null;
+                    cb.onReceiveValue(null);
+                    return false;
+                }
+            }
+        });
         web.addJavascriptInterface(new Bridge(),"Danzhi");
         web.loadUrl("file:///android_asset/www/index.html");
         MailClient.browser=(c,email,pass)->MailBrowser.loginAndList(MainActivity.this,c,email,pass);
+        // Never attach a hidden eCard WebView. It froze and crashed the process on 生活码.
         getOnBackPressedDispatcher().addCallback(this,new OnBackPressedCallback(true){
             @Override public void handleOnBackPressed(){
                 if(web==null)return;
@@ -68,6 +90,23 @@ public class MainActivity extends AppCompatActivity {
                 return;
             }
             execute("onScanResult",client->EcardClient.scan(client,code));
+        });
+        fileLauncher=registerForActivityResult(new ActivityResultContracts.StartActivityForResult(),result->{
+            Uri[] uris=null;
+            if(result.getResultCode()==RESULT_OK && result.getData()!=null){
+                Intent data=result.getData();
+                if(data.getClipData()!=null){
+                    int n=data.getClipData().getItemCount();
+                    uris=new Uri[n];
+                    for(int i=0;i<n;i++) uris[i]=data.getClipData().getItemAt(i).getUri();
+                } else if(data.getData()!=null){
+                    uris=new Uri[]{data.getData()};
+                }
+            }
+            if(fileCallback!=null){
+                fileCallback.onReceiveValue(uris);
+                fileCallback=null;
+            }
         });
         // Intentionally no client creation, login, polling, foreground service or network request in onCreate.
     }
@@ -107,6 +146,7 @@ public class MainActivity extends AppCompatActivity {
                 JSONObject r=client.login(user,password,"",code);
                 if("ok".equals(r.optString("status"))){
                     SessionCoordinator.save(MainActivity.this,client,true);
+                    if(sp.getInt("intervalMin",0)<15) sp.edit().putInt("intervalMin",15).apply();
                     sp.edit().putBoolean("backgroundEnabled",true).apply();
                     runOnUiThread(()->{
                         try {
@@ -115,6 +155,7 @@ public class MainActivity extends AppCompatActivity {
                             PollService.schedule(MainActivity.this);
                             AlarmReceiver.schedule(MainActivity.this);
                             KeepAliveService.start(MainActivity.this);
+                            KeepAliveService.enqueuePoll(MainActivity.this);
                             if(!sp.getBoolean("askedBattery",false) && Build.VERSION.SDK_INT>=23){
                                 sp.edit().putBoolean("askedBattery",true).apply();
                                 try {
@@ -140,7 +181,9 @@ public class MainActivity extends AppCompatActivity {
                     .put("hasSession",sp.getBoolean("hasSession",false)).put("hasPassword",false).put("hasSecret",false)
                     .put("intervalMin",Math.max(15,sp.getInt("intervalMin",15)))
                     .put("backgroundEnabled",sp.getBoolean("backgroundEnabled",false))
-                    .put("smsPhone",sp.getString("smsPhone","")).put("version",BuildConfig.VERSION_NAME);
+                    .put("smsPhone",sp.getString("smsPhone","")).put("version",BuildConfig.VERSION_NAME)
+                    .put("lastBackgroundPollAt",sp.getLong("lastBackgroundPollAt",0L))
+                    .put("backgroundError",sp.getString("backgroundError",""));
                 String last=sp.getString("lastPoll","");if(!last.isEmpty())o.put("lastPoll",new JSONObject(last));
                 return o.toString();
             }catch(Exception e){return Diagnostics.error(e).toString();}
@@ -173,6 +216,7 @@ public class MainActivity extends AppCompatActivity {
                         PollService.schedule(MainActivity.this);
                         AlarmReceiver.schedule(MainActivity.this);
                         KeepAliveService.start(MainActivity.this);
+                        KeepAliveService.enqueuePoll(MainActivity.this);
                     } else {
                         PollService.cancel(MainActivity.this);
                         AlarmReceiver.cancel(MainActivity.this);
@@ -185,6 +229,15 @@ public class MainActivity extends AppCompatActivity {
         @JavascriptInterface public void setSmsPhone(String phone){
             sp.edit().putString("smsPhone",phone==null?"":phone.trim()).apply();
             if(phone!=null&&!phone.trim().isEmpty())runOnUiThread(()->ActivityCompat.requestPermissions(MainActivity.this,new String[]{Manifest.permission.SEND_SMS},2));
+        }
+        @JavascriptInterface public String notes(){
+            String json=sp.getString("notesJson","[]");
+            return json==null||json.isEmpty()?"[]":json;
+        }
+        @JavascriptInterface public void saveNotes(String json){
+            String body=json==null||json.isEmpty()?"[]":json;
+            if(body.length()>1_500_000) body="[]";
+            sp.edit().putString("notesJson",body).apply();
         }
         @JavascriptInterface public void refreshQr(){ getQr("1"); }
         @JavascriptInterface public void getQr(String forceFlag){
@@ -242,5 +295,10 @@ public class MainActivity extends AppCompatActivity {
             try { AlarmReceiver.schedule(this); } catch(RuntimeException ignored) {}
         }
     }
-    @Override protected void onDestroy(){destroyed=true;if(web!=null){web.removeJavascriptInterface("Danzhi");web.destroy();web=null;}super.onDestroy();}
+    @Override protected void onDestroy(){
+        destroyed=true;
+        if(fileCallback!=null){try{fileCallback.onReceiveValue(null);}catch(RuntimeException ignored){} fileCallback=null;}
+        if(web!=null){web.removeJavascriptInterface("Danzhi");web.destroy();web=null;}
+        super.onDestroy();
+    }
 }

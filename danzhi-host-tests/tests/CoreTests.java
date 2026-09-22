@@ -58,7 +58,17 @@ public final class CoreTests {
         test("cookie expiry survives persistence without renewal",()->{CookieStore s=new CookieStore();s.absorb(ID+"/",headers("sid=abc; Max-Age=2; Path=/"),1000);CookieStore r=new CookieStore();r.restore(s.snapshot(),1000);eq(r.header(ID+"/",2000),"sid=abc");eq(r.header(ID+"/",3001),"");});
         test("expired cookie deleted",()->{CookieStore s=new CookieStore();s.absorb(ID+"/",headers("sid=abc; Path=/"),1000);s.absorb(ID+"/",headers("sid=gone; Path=/; Max-Age=0"),1000);eq(s.header(ID+"/",1000),"");});
         test("__Host cookie prefix restrictions",()->{CookieStore s=new CookieStore();s.absorb(ID+"/",headers("__Host-sid=abc; Domain=fudan.edu.cn; Path=/; Secure"),1000);eq(s.snapshot().size(),0);});
+        test("cookie restore last write wins and dedupes",()->{
+            CookieStore s=new CookieStore();
+            CookieStore.Entry a=new CookieStore.Entry();a.name="sid";a.value="old";a.domain="id.fudan.edu.cn";a.path="/";a.hostOnly=true;a.secure=true;a.expiresAt=-1;
+            CookieStore.Entry b=new CookieStore.Entry();b.name="sid";b.value="new";b.domain="id.fudan.edu.cn";b.path="/";b.hostOnly=true;b.secure=true;b.expiresAt=-1;
+            s.restore(Arrays.asList(a,b),1000);
+            eq(s.header(ID+"/",1000),"sid=new");
+            eq(s.snapshot().size(),1);
+        });
         test("cookie restore preserves host-only",()->{CookieStore s=new CookieStore();s.absorb(ID+"/",headers("sid=abc; Path=/"),1000);CookieStore r=new CookieStore();r.restore(s.snapshot(),1000);eq(r.header("https://sub.id.fudan.edu.cn/",1000),"");});
+        test("student id from 树维 info url",()->eq(TimetableText.studentIdFrom("https://fdjwgl.fudan.edu.cn/student/for-std/course-table/info/412345","<html>"),"412345"));
+        test("student id from semester-index",()->eq(TimetableText.studentIdFrom("https://fdjwgl.fudan.edu.cn/student/for-std/course-table/semester-index/88",""),"88"));
         test("cookie longest-path ordering",()->{CookieStore s=new CookieStore();s.absorb(ID+"/",headers("sid=root; Path=/","sid=deep; Path=/epay"),1000);eq(s.header(ID+"/epay/a",1000),"sid=deep; sid=root");});
         test("lesson text multi-slot sorts by weekday and period",()->{List<TimetableText.Lesson> l=TimetableText.parse("高数","1~16周 星期三 3~4节 H310 教师甲;\n1~16周 星期一 1~2节 H101 教师乙");eq(l.size(),2);eq(l.get(0).day,1);eq(l.get(0).startPeriod,1);eq(l.get(0).location,"H101");eq(l.get(0).weeks.size(),16);});
         test("odd weeks retained",()->eq(TimetableText.weeks("1-8周(单)"),new TreeSet<>(Arrays.asList(1,3,5,7))));
@@ -257,6 +267,22 @@ public final class CoreTests {
             eq(FeedMerge.collapse(Arrays.asList(a,b,c)).size(),1);
             eq(FeedMerge.homeworkId("【作业提醒】计算方法作业5"),"计算方法作业5");
         });
+        test("elearning announcement and assignment with same stem collapse",()->{
+            FeedMerge.Item a=new FeedMerge.Item();a.source="elearning";a.kind="ddl";a.title="统计学课程论文";
+            FeedMerge.Item b=new FeedMerge.Item();b.source="elearning";b.kind="announcement";b.title="【即将到期】统计学课程论文";
+            eq(FeedMerge.collapse(Arrays.asList(a,b)).size(),1);
+        });
+        test("chinese ordinal homework merges with arabic number",()->{
+            FeedMerge.Item a=new FeedMerge.Item();a.source="elearning";a.kind="ddl";a.title="线性代数第三次作业";
+            FeedMerge.Item b=new FeedMerge.Item();b.source="elearning";b.kind="ddl";b.title="线性代数作业3";
+            eq(FeedMerge.homeworkId("线性代数第三次作业"),"线性代数作业3");
+            eq(FeedMerge.collapse(Arrays.asList(a,b)).size(),1);
+        });
+        test("same canvas assignment url merges different titles",()->{
+            FeedMerge.Item a=new FeedMerge.Item();a.source="elearning";a.kind="ddl";a.title="HW 3";a.url="https://elearning.fudan.edu.cn/courses/9/assignments/3";
+            FeedMerge.Item b=new FeedMerge.Item();b.source="elearning";b.kind="ddl";b.title="第三次作业";b.url="https://elearning.fudan.edu.cn/courses/9/assignments/3";
+            eq(FeedMerge.collapse(Arrays.asList(a,b)).size(),1);
+        });
         test("different homework numbers stay",()->{
             FeedMerge.Item a=new FeedMerge.Item();a.source="elearning";a.kind="ddl";a.title="计算方法作业3";
             FeedMerge.Item b=new FeedMerge.Item();b.source="elearning";b.kind="ddl";b.title="计算方法作业5";
@@ -291,6 +317,44 @@ public final class CoreTests {
             List<PageParser.Notice> n=PageParser.notices("https://math.fudan.edu.cn/tzgg/list.htm",
                 "<li class='news'><div class='news_date'><div class='day'>04.08</div><div class='year'>2026</div></div><div class='news_title'><a href='/db/89/c52033a777097/page.htm' title='华东杯大学生数学建模邀请赛通知'>华东杯大学生数学建模邀请赛通知</a></div><div class='news_time'>2026-04-08</div></li>");
             eq(n.size(),1);eq(n.get(0).date,"2026-04-08");
+        });
+        test("adjacent checkbox mails keep their own titles",()->{
+            String html="<table><tr><td><input name=\"mailid\" value=\"ZC0021-AAAAAAAAAAAAAAA0001\" fn=\"dl dldl\" fa=\"a@b.edu\" unread=true totime=\"1789990000000\"></td>"
+                +"<td><u class=\"black\">test</u></td></tr>"
+                +"<tr><td><input name=\"mailid\" value=\"ZC0021-BBBBBBBBBBBBBBB0002\" fn=\"腾讯企业邮箱\" fa=\"noreply@exmail.qq.com\" unread=false totime=\"1789980000000\"></td>"
+                +"<td><u class=\"black s1\">异地登录提醒</u></td></tr></table>";
+            java.util.List<PageParser.WebMail> mails=PageParser.exmailCheckboxMails(html);
+            eq(mails.size(),2);
+            eq(mails.get(0).title,"test");
+            eq(mails.get(0).fromName,"dl dldl");
+            eq(mails.get(1).title,"异地登录提醒");
+            eq(mails.get(1).fromName,"腾讯企业邮箱");
+        });
+        test("mail title prefers tt attribute over later black s1",()->{
+            String html="<input name=\"mailid\" value=\"ZC0021-CCCCCCCCCCCCCCC0003\" tt=\"test\" fn=\"dl dldl\">"
+                +"<u class=\"black\">test</u><u class=\"black s1\">异地登录提醒</u>";
+            java.util.List<PageParser.WebMail> mails=PageParser.exmailCheckboxMails(html);
+            eq(mails.size(),1);
+            eq(mails.get(0).title,"test");
+        });
+        test("QR json qrCode field",()->eq(PageParser.qrPayload("{\"qrCode\":\"official-life-code-token\"}"),"official-life-code-token"));
+        test("QR json nested data.qrcode",()->eq(PageParser.qrPayloadJson("{\"data\":{\"qrcode\":\"nested-official-qr\"}}"),"nested-official-qr"));
+        test("mail json content unescapes html",()->{
+            String v=PageParser.mailJsonContent("&&0&&{content:\"<p>hello \\u4e16\\u754c</p>\"}");
+            yes(v.contains("hello"));
+            yes(PageParser.text(v).contains("世界"));
+        });
+        test("mail iframe src from content frame",()->eq(
+            PageParser.mailIframeSrc("<html>读信<iframe id=\"contentFrame\" src=\"/cgi-bin/readmail?sid=Ab&mailid=Z1&t=read.html\"></iframe></html>"),
+            "/cgi-bin/readmail?sid=Ab&mailid=Z1&t=read.html"));
+        test("mail chrome page is not treated as body",()->eq(
+            PageParser.mailBodyHtml("<html><body>读信 回复 转发<iframe id=\"contentFrame\" src=\"/cgi-bin/readmail?content=1\"></iframe></body></html>"),
+            ""));
+        test("mail list total from json",()->eq(PageParser.mailListTotal("{\"mailcount\":66,\"ids\":[]}"),66));
+        test("session timeout cgi is not a letter body",()->{
+            String blob="{title : \"cgi exception\",appname : \"readmail\",errcode: \"-2\",errmsg: \" \\x3cscript\\x3egetTop().location.href=\\x22/cgi-bin/loginpage?s=session_timeout\\x22;\\x3c/script\\x3e\" }";
+            yes(PageParser.looksLikeMailSessionDead(blob));
+            eq(PageParser.mailBodyHtml(blob),"");
         });
         System.out.println("RESULT "+passed+" passed "+failed+" failed");if(failed>0)System.exit(1);
     }

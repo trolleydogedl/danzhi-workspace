@@ -9,6 +9,7 @@ public final class FeedMerge {
     private FeedMerge() {}
     private static final Pattern HW = Pattern.compile("(.+?)作业\\s*[第]?\\s*([0-9０-９]{1,3})");
     private static final Pattern HW_NTH = Pattern.compile("第\\s*([0-9０-９]{1,3})\\s*次");
+    private static final Pattern ASG_URL = Pattern.compile("courses/(\\d+)/(?:assignments|quizzes)/(\\d+)");
     private static final long WEEK_MS = 7L * 24L * 60L * 60L * 1000L;
 
     public static final class Item {
@@ -80,10 +81,55 @@ public final class FeedMerge {
         return b.toString();
     }
 
+    static int parseCnNum(String s) {
+        if (s == null || s.isEmpty()) return -1;
+        int n = 0, tmp = 0;
+        for (int i = 0; i < s.length(); i++) {
+            int d = "零一二三四五六七八九".indexOf(s.charAt(i));
+            if (s.charAt(i) == '十') {
+                n += (tmp == 0 ? 1 : tmp) * 10;
+                tmp = 0;
+            } else if (s.charAt(i) == '百') {
+                n += (tmp == 0 ? 1 : tmp) * 100;
+                tmp = 0;
+            } else if (d >= 0) tmp = d;
+            else return -1;
+        }
+        return n + tmp;
+    }
+
+    static String unfoldChineseOrdinals(String t) {
+        if (t == null || t.isEmpty()) return "";
+        Matcher m = Pattern.compile("第([一二三四五六七八九十百]+)次").matcher(t);
+        StringBuffer sb = new StringBuffer();
+        while (m.find()) {
+            int n = parseCnNum(m.group(1));
+            m.appendReplacement(sb, n > 0 ? ("第" + n + "次") : m.group());
+        }
+        m.appendTail(sb);
+        t = sb.toString();
+        m = Pattern.compile("([一二三四五六七八九十百]+)次作业").matcher(t);
+        sb = new StringBuffer();
+        while (m.find()) {
+            int n = parseCnNum(m.group(1));
+            m.appendReplacement(sb, n > 0 ? (n + "次作业") : m.group());
+        }
+        m.appendTail(sb);
+        return sb.toString();
+    }
+
+    public static String assignmentUrlKey(String url) {
+        if (url == null || url.isEmpty()) return "";
+        Matcher m = ASG_URL.matcher(url);
+        return m.find() ? (m.group(1) + "/" + m.group(2)) : "";
+    }
+
     /** Stable id for the same homework scraped from planner / calendar / assignments / 作业提醒. */
     public static String homeworkId(String title) {
-        String t = stripDecor(title);
+        String t = unfoldChineseOrdinals(asciiDigits(stripDecor(title)));
         if (t.isEmpty()) return "";
+        t = t.replaceAll("第\\s*([0-9]{1,3})\\s*次作业", "作业$1");
+        t = t.replaceAll("([0-9]{1,3})\\s*次作业", "作业$1");
         Matcher m = HW.matcher(t);
         if (m.find()) {
             String course = m.group(1).replaceAll("[\\s\\p{Punct}A-Za-z0-9._]+", "");
@@ -94,7 +140,7 @@ public final class FeedMerge {
         if (t.contains("作业")) {
             Matcher n = HW_NTH.matcher(t);
             if (n.find()) {
-                String course = t.replaceAll("作业.*", "").replaceAll("[\\s\\p{Punct}A-Za-z0-9._]+", "");
+                String course = t.replaceAll("作业.*", "").replaceAll("第.*", "").replaceAll("[\\s\\p{Punct}A-Za-z0-9._]+", "");
                 if (course.length() >= 2) return course + "作业" + asciiDigits(n.group(1));
             }
         }
@@ -110,6 +156,9 @@ public final class FeedMerge {
     public static String key(Item it) {
         if (it == null) return "";
         if ("mail".equals(it.source)) return "mail|" + (it.id == null || it.id.isEmpty() ? it.title : it.id);
+        String urlKey = assignmentUrlKey(it.url);
+        if (!urlKey.isEmpty() && ("elearning".equals(it.source) || isAssignment(it.kind)))
+            return "asgurl|" + urlKey;
         String hw = homeworkId(it.title);
         if (!hw.isEmpty() && ("elearning".equals(it.source) || isAssignment(it.kind)))
             return "hw|" + hw;
@@ -121,13 +170,28 @@ public final class FeedMerge {
     public static boolean sameNotice(Item a, Item b) {
         if (a == null || b == null) return false;
         if ("mail".equals(a.source) || "mail".equals(b.source)) return false;
+        String ua = assignmentUrlKey(a.url), ub = assignmentUrlKey(b.url);
+        if (!ua.isEmpty() && ua.equals(ub)) return true;
         String ha = homeworkId(a.title), hb = homeworkId(b.title);
         if (!ha.isEmpty() && ha.equals(hb)) return true;
+        String stemA = noticeStem(a.title), stemB = noticeStem(b.title);
+        if (stemA.length() >= 6 && stemA.equals(stemB)
+                && "elearning".equals(a.source) && "elearning".equals(b.source))
+            return true;
         String ga = kindGroup(a.kind), gb = kindGroup(b.kind);
         boolean aAsg = "asg".equals(ga);
         boolean bAsg = "asg".equals(gb);
         if (aAsg != bAsg) return false;
-        if (aAsg) return noticeStem(a.title).equals(noticeStem(b.title)) && a.source.equals(b.source);
+        if (aAsg) {
+            if (!a.source.equals(b.source)) return false;
+            String sa = noticeStem(a.title), sb = noticeStem(b.title);
+            if (sa.isEmpty() || sb.isEmpty()) return false;
+            if (sa.equals(sb)) return true;
+            if ((a.dueAt != null && !a.dueAt.isEmpty() && a.dueAt.equals(b.dueAt))
+                    && sa.length() >= 6 && sb.length() >= 6 && (sa.startsWith(sb) || sb.startsWith(sa)))
+                return true;
+            return false;
+        }
         String sa = noticeStem(a.title), sb = noticeStem(b.title);
         if (sa.isEmpty() || sb.isEmpty()) return false;
         if (sa.equals(sb)) return true;
@@ -204,6 +268,11 @@ public final class FeedMerge {
             if (it.title.isEmpty()) continue;
             String k = key(it);
             Item old = best.get(k);
+            if (old == null) {
+                for (Map.Entry<String, Item> e : best.entrySet()) {
+                    if (sameNotice(it, e.getValue())) { k = e.getKey(); old = e.getValue(); break; }
+                }
+            }
             if (old == null) best.put(k, it.copy());
             else best.put(k, combine(it, old));
         }

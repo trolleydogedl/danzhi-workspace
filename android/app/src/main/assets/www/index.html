@@ -33,8 +33,8 @@
     .mark { width:76px; height:76px; }
     .mark svg { width:76px; height:76px; display:block; }
     .nav { position:fixed; left:12px; right:12px; bottom:calc(10px + env(safe-area-inset-bottom));
-      display:grid; grid-template-columns:repeat(5,1fr);
-      background:rgba(255,255,255,.92); border:1px solid var(--border);
+      display:grid; grid-template-columns:repeat(6,1fr);
+      background:color-mix(in srgb, var(--elev) 92%, transparent); border:1px solid var(--border);
       border-radius:28px; padding:6px; box-shadow:var(--shadow); backdrop-filter:blur(12px); }
     .nav button.on { color:var(--primary); font-weight:700; background:var(--surface); border-radius:22px; }
     .card { background:var(--elev); box-shadow:var(--shadow); border-radius:var(--r-md);
@@ -43,12 +43,12 @@
       color:var(--on); width:100%; font-weight:700;
       display:flex; align-items:center; justify-content:center; gap:8px;
       transition:background-color .15s var(--ease), transform .12s var(--ease); }
-    .btn:active, .btn.busy { background:#E25544; transform:scale(.97); opacity:1; }
+    .btn:active, .btn.busy { filter:brightness(.92); transform:scale(.97); opacity:1; }
     .btn-ghost { height:48px; border:1px solid var(--border); border-radius:18px;
       background:var(--elev); color:var(--fg); width:100%; font-weight:600; }
     .btn-ghost:active { background:var(--surface); }
     .hint { color:var(--subtle); font-size:12px; line-height:1.55; }
-    .nav button { height:52px; border:0; background:none; color:var(--subtle); font-size:10px;
+    .nav button { height:52px; border:0; background:none; color:var(--subtle); font-size:9px;
       display:flex; flex-direction:column; align-items:center; justify-content:center; gap:3px; }
     .nav button svg { width:22px; height:22px; }
     .badge { font-size:11px; background:var(--surface); border-radius:999px; padding:3px 8px; color:var(--muted); }
@@ -64,12 +64,15 @@
     .toast.show { opacity:1; }
     .next { background:var(--primary); color:var(--on); border-radius:22px; padding:18px; margin:0 0 14px; box-shadow:var(--shadow); }
     .next .k { font-size:11px; letter-spacing:.12em; opacity:.8; }
-    .slots { display:flex; gap:4px; margin-top:10px; }
-    .slots i { flex:1; height:18px; border-radius:5px; background:var(--ok); border:1px solid color-mix(in srgb, var(--ok) 55%, #000); }
-    .slots i.busy { background:var(--busy); border-color:color-mix(in srgb, var(--busy) 70%, #000); }
+    .slots { display:flex; gap:3px; margin-top:8px; }
+    .slots i { flex:1; height:16px; border-radius:3px; background:var(--ok); border:none; }
+    .slots i.busy { background:var(--busy); }
+    .slots i.now { outline:2px solid var(--fg); outline-offset:2px; box-shadow:0 0 0 1px var(--elev); position:relative; z-index:1; }
+    .slot-legend { display:flex; gap:3px; margin:8px 0 4px; }
+    .slot-legend span { flex:1; text-align:center; font-size:9px; color:var(--subtle); font-weight:700; }
+    .slot-legend span.now { color:var(--fg); }
     .src-link { margin-top:8px; min-height:36px; border:1px solid var(--border); background:var(--surface); color:var(--primary); font-size:12px; font-weight:700; padding:0 12px; border-radius:12px; }
     .theme-dot { width:14px; height:14px; border-radius:99px; display:inline-block; margin-right:6px; vertical-align:middle; border:1px solid var(--border); }
-    .slots i.now { outline:3px solid #1A120F; outline-offset:2px; box-shadow:0 0 0 1px #fff; position:relative; z-index:1; }
     .sec { font-size:12px; color:var(--muted); margin:16px 0 6px; font-weight:700; }
     article.unread { box-shadow:0 0 0 2px rgba(255,107,87,.28), var(--shadow); }
     article.read { opacity:.92; }
@@ -111,6 +114,36 @@
       background:var(--surface); padding:4px 8px; border-radius:999px; }
     .free { color:#2f8a52; background:#d9f6e3; }
     .occ { color:#b4232a; background:#ffe1e1; }
+    textarea.note-body { width:100%; min-height:168px; border:1px solid var(--border); border-radius:16px;
+      padding:12px; background:var(--elev); color:var(--fg); font:inherit; resize:vertical; outline:none; }
+    .note-attach { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+    .note-attach img { width:76px; height:76px; object-fit:cover; border-radius:12px; border:1px solid var(--border); background:#fff; }
+    .note-attach .file { font-size:12px; color:var(--primary); font-weight:700; padding:8px 10px; border-radius:12px; background:var(--surface); }
+    #notePad { position:fixed; inset:0; background:var(--bg); z-index:40; display:flex; flex-direction:column; }
+    #notePad.hidden { display:none !important; }
+    html[data-style="peach"] { --r-sm:12px; --r-md:18px; --r-lg:26px; }
+    html[data-style="paper"] { --r-sm:6px; --r-md:10px; --r-lg:12px; }
+    html[data-style="paper"] body { font-family:"Noto Serif SC","Source Han Serif SC","Songti SC",serif; }
+    html[data-style="paper"] .card { border:1px solid color-mix(in srgb, var(--fg) 28%, var(--border)); box-shadow:none; border-radius:var(--r-md); background:var(--elev); }
+    html[data-style="paper"] .nav { border-radius:12px; border:1px solid color-mix(in srgb, var(--fg) 22%, var(--border)); box-shadow:none; }
+    html[data-style="paper"] .btn, html[data-style="paper"] .btn-ghost { border-radius:8px; }
+    html[data-style="paper"] .chips button { border-radius:6px; }
+    html[data-style="glass"] { --r-sm:16px; --r-md:24px; --r-lg:32px; }
+    html[data-style="glass"] body { background:linear-gradient(180deg,#e8f1fb 0%,#eef3f8 40%,#f7fbff 100%); }
+    html[data-style="glass"] .nav { background:color-mix(in srgb, var(--elev) 55%, transparent); backdrop-filter:blur(18px); }
+    html[data-style="glass"] .card { background:color-mix(in srgb, var(--elev) 82%, transparent); backdrop-filter:blur(14px); border-radius:var(--r-lg); border:1px solid rgba(255,255,255,.7); }
+    html[data-style="glass"] .btn { border-radius:22px; }
+    html[data-style="campus"] { --r-sm:4px; --r-md:8px; --r-lg:12px; }
+    html[data-style="campus"] .btn { letter-spacing:.08em; border-radius:2px; text-transform:none; }
+    html[data-style="campus"] .nav { border-radius:4px; border:2px solid var(--fg); }
+    html[data-style="campus"] .card { border-radius:4px; box-shadow:none; border:1px solid var(--fg); }
+    html[data-style="campus"] .nav button.on { background:var(--primary); color:#fff; border-radius:2px; }
+    html[data-style="campus"] h1 { letter-spacing:.04em; }
+    html[data-style="ink"] body, html[data-style="night"] body { color-scheme:dark; }
+    html[data-style="ink"] .nav, html[data-style="night"] .nav { background:color-mix(in srgb, var(--elev) 92%, transparent); }
+    html[data-style="ink"] .card, html[data-style="night"] .card { border-color:color-mix(in srgb, var(--fg) 12%, transparent); }
+    html[data-style="ink"] .qrbox, html[data-style="night"] .qrbox { background:#fff; }
+    html[data-style="night"] body { background:radial-gradient(1200px 600px at 20% -10%, #3a2c48 0%, #1c1524 55%); }
   </style>
 </head>
 <body>
@@ -129,7 +162,7 @@
   <p class="kicker" style="margin-top:22px">复旦校园小助手</p>
   <h1 style="margin-top:8px;font-size:40px">旦知</h1>
   <p class="hint" style="margin-top:8px;max-width:32ch">先填学号密码。通过后再打开 Authenticator，输入 6 位码。</p>
-  <p id="buildInfo" class="hint" style="margin-top:8px;font-weight:600">1.25.0 · 正在初始化登录模块…</p>
+  <p id="buildInfo" class="hint" style="margin-top:8px;font-weight:600">1.29.0 · 正在初始化登录模块…</p>
   <form id="loginForm" action="javascript:void(0)" onsubmit="return false;">
     <p class="kicker" style="margin-top:18px">步骤 1 / 2</p>
     <label>学号<input id="user" inputmode="numeric" autocomplete="username" required placeholder="UIS 学号"></label>
@@ -198,45 +231,27 @@
     <div class="chips" id="bchips"></div>
     <div id="roomList"><p class="hint">选择楼宇后查询。</p></div>
   </div>
+  <div id="notes" class="wrap hidden">
+    <p class="kicker">笔记</p>
+    <h1 style="margin-top:6px;font-size:32px">随手记</h1>
+    <p class="hint">本地保存。可置顶、编辑、删，也能附照片和文件。</p>
+    <button class="btn" id="noteNew" type="button" style="margin-top:14px">写一条</button>
+    <div id="noteList" style="margin-top:8px"></div>
+  </div>
   <div id="set" class="wrap hidden">
     <p class="kicker">设置</p>
     <h1 id="setName" style="margin-top:6px;font-size:32px">已登录</h1>
-    <p class="hint" id="setVer">版本 1.25.0</p>
+    <p class="hint" id="setVer">版本 1.29.0</p>
     <div class="card">
-      <p style="margin:0 0 10px;font-weight:500">外观</p>
+      <p style="margin:0 0 10px;font-weight:500">外观风格</p>
+      <p class="hint" style="margin:0 0 10px">不是换颜色，而是换版式：圆角、衬线、玻璃、校色、深色。</p>
       <div class="chips" id="themeChips">
-        <button data-theme="peach" class="on"><i class="theme-dot" style="background:#FF7B6A"></i>蜜桃</button>
-        <button data-theme="mint"><i class="theme-dot" style="background:#3BA56A"></i>青柠</button>
-        <button data-theme="matcha"><i class="theme-dot" style="background:#6B8F71"></i>抹茶</button>
-        <button data-theme="sky"><i class="theme-dot" style="background:#3D7EEA"></i>晴空</button>
-        <button data-theme="ocean"><i class="theme-dot" style="background:#1D9A9A"></i>海盐</button>
-        <button data-theme="grape"><i class="theme-dot" style="background:#7B5EA7"></i>葡萄</button>
-        <button data-theme="rose"><i class="theme-dot" style="background:#C45C7A"></i>蔷薇</button>
-        <button data-theme="sand"><i class="theme-dot" style="background:#C4A35A"></i>麦芽</button>
-        <button data-theme="paper"><i class="theme-dot" style="background:#C45C4A"></i>宣纸</button>
-        <button data-theme="ink"><i class="theme-dot" style="background:#2A2623"></i>墨夜</button>
-        <button data-theme="blossom"><i class="theme-dot" style="background:#E88BA8"></i>樱花</button>
-        <button data-theme="dusk"><i class="theme-dot" style="background:#E07A3D"></i>黄昏</button>
-        <button data-theme="aurora"><i class="theme-dot" style="background:#3DB8A0"></i>极光</button>
-        <button data-theme="lilac"><i class="theme-dot" style="background:#8B7CC9"></i>雪青</button>
-        <button data-theme="caramel"><i class="theme-dot" style="background:#B56B3A"></i>焦糖</button>
-        <button data-theme="bamboo"><i class="theme-dot" style="background:#4F8F62"></i>竹影</button>
-        <button data-theme="cloud"><i class="theme-dot" style="background:#6B7380"></i>云灰</button>
-        <button data-theme="berry"><i class="theme-dot" style="background:#C43D5B"></i>浆果</button>
-        <button data-theme="cream"><i class="theme-dot" style="background:#E8C47A"></i>奶油</button>
-        <button data-theme="soda"><i class="theme-dot" style="background:#5AB0E8"></i>汽水</button>
-        <button data-theme="milktea"><i class="theme-dot" style="background:#C48A6A"></i>奶茶</button>
-        <button data-theme="moon"><i class="theme-dot" style="background:#8FA2C4"></i>月光</button>
-        <button data-theme="tangerine"><i class="theme-dot" style="background:#F08A4B"></i>橘子</button>
-        <button data-theme="lotus"><i class="theme-dot" style="background:#D98CB3"></i>莲花</button>
-        <button data-theme="celeste"><i class="theme-dot" style="background:#6AA8A0"></i>青瓷</button>
-        <button data-theme="persimmon"><i class="theme-dot" style="background:#E85D4C"></i>柿子</button>
-        <button data-theme="night"><i class="theme-dot" style="background:#5C4A7A"></i>夜樱</button>
-        <button data-theme="mist"><i class="theme-dot" style="background:#7A90B4"></i>雾蓝</button>
-        <button data-theme="strawberry"><i class="theme-dot" style="background:#E24B6A"></i>草莓</button>
-        <button data-theme="lemon"><i class="theme-dot" style="background:#D6B23A"></i>柠檬</button>
-        <button data-theme="taro"><i class="theme-dot" style="background:#9A7AB8"></i>芋泥</button>
-        <button data-theme="oat"><i class="theme-dot" style="background:#B89A78"></i>燕麦</button>
+        <button data-theme="peach" class="on"><i class="theme-dot" style="background:#FF7B6A"></i>蜜桃 · 暖圆</button>
+        <button data-theme="paper"><i class="theme-dot" style="background:#C45C4A"></i>宣纸 · 书院</button>
+        <button data-theme="glass"><i class="theme-dot" style="background:#3D7EEA"></i>玻璃 · 轻透</button>
+        <button data-theme="campus"><i class="theme-dot" style="background:#C8102E"></i>复旦 · 蓝红</button>
+        <button data-theme="ink"><i class="theme-dot" style="background:#2A2623"></i>墨夜 · 深色</button>
+        <button data-theme="night"><i class="theme-dot" style="background:#E89AC0"></i>夜樱 · 暗粉</button>
       </div>
     </div>
     <div class="card">
@@ -252,6 +267,8 @@
       <p style="margin:0 0 6px;font-weight:500">新邮件短信</p>
       <p class="hint">新邮件可发送系统通知；填写手机号即启用额外短信，并需要短信权限，可能产生运营商费用。留空不发短信。</p>
       <input id="smsPhone" placeholder="11 位手机号，可留空" inputmode="numeric" maxlength="11" style="margin-top:8px">
+      <button class="btn-ghost" id="smsSave" type="button" style="margin-top:8px">确认手机号</button>
+      <p class="hint" id="smsMsg"></p>
     </div>
     <div class="card">
       <p style="margin:0 0 6px;font-weight:500">学生云邮箱</p>
@@ -274,6 +291,7 @@
     <button data-tab="table"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 3.2h2.2v3.2H8zM13.8 3.2H16v3.2h-2.2z"/><path fill-rule="evenodd" d="M5 6.4h14c1.1 0 2 .9 2 2v11c0 1.1-.9 2-2 2H5c-1.1 0-2-.9-2-2v-11c0-1.1.9-2 2-2zm0 3.4v1.6h14V9.8H5zm1.7 3.8h3.1v3.1H6.7v-3.1zm5.2 0h3.1v3.1h-3.1v-3.1zm5.2 0H20v3.1h-2.9v-3.1z"/></svg>课表</button>
     <button data-tab="pass"><svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M3.2 3.2h7.4v7.4H3.2V3.2zm2 2v3.4h3.4V5.2H5.2zM13.4 3.2h7.4v7.4h-7.4V3.2zm2 2v3.4h3.4V5.2h-3.4zM3.2 13.4h7.4v7.4H3.2v-7.4zm2 2v3.4h3.4v-3.4H5.2z"/><rect x="13.4" y="13.4" width="3.2" height="3.2" rx="0.4"/><rect x="17.6" y="13.4" width="3.2" height="3.2" rx="0.4"/><rect x="13.4" y="17.6" width="3.2" height="3.2" rx="0.4"/><rect x="17.6" y="17.6" width="3.2" height="3.2" rx="0.4"/></svg>校园码</button>
     <button data-tab="rooms"><svg viewBox="0 0 24 24" fill="currentColor"><path fill-rule="evenodd" d="M4.2 20.8V8.6L12 4.2l7.8 4.4v12.2h-2.2v-10L12 6.6 6.4 10.8v10H4.2zm6 0v-6.2h3.6v6.2h-3.6z"/></svg>教室</button>
+    <button data-tab="notes"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M6.2 3.2h8.2L19.8 8.6v12.2c0 .9-.7 1.6-1.6 1.6H6.2c-.9 0-1.6-.7-1.6-1.6V4.8c0-.9.7-1.6 1.6-1.6Z"/><path d="M14.2 3.4v5.2h5.2" fill="none" stroke="#fff8f0" stroke-width="1.6"/><rect x="7.4" y="11.2" width="9.2" height="1.6" rx=".6" fill="#fff8f0"/><rect x="7.4" y="14.4" width="6.4" height="1.6" rx=".6" fill="#fff8f0"/></svg>笔记</button>
     <button data-tab="set"><svg viewBox="0 0 24 24" fill="currentColor"><rect x="3.2" y="5.2" width="17.6" height="2.2" rx="1.1"/><circle cx="8.2" cy="6.3" r="2.15"/><rect x="3.2" y="10.9" width="17.6" height="2.2" rx="1.1"/><circle cx="14.6" cy="12" r="2.15"/><rect x="3.2" y="16.6" width="17.6" height="2.2" rx="1.1"/><circle cx="10.4" cy="17.7" r="2.15"/></svg>设置</button>
   </nav>
 </div>
@@ -284,6 +302,22 @@
     <button class="btn-ghost" id="readerOpen" type="button" style="width:auto;padding:0 14px">原平台</button>
   </div>
   <iframe id="readerFrame" sandbox="allow-same-origin" title="正文"></iframe>
+</div>
+<div id="notePad" class="hidden">
+  <div class="reader-bar">
+    <button class="btn-ghost" id="noteBack" type="button" style="width:auto;padding:0 14px">返回</button>
+    <strong id="notePadTitle">笔记</strong>
+    <button class="btn-ghost" id="notePinBtn" type="button" style="width:auto;padding:0 14px">置顶</button>
+  </div>
+  <div class="wrap" style="padding-top:12px;flex:1;overflow:auto">
+    <input id="noteTitle" placeholder="标题" maxlength="80">
+    <textarea class="note-body" id="noteBody" placeholder="记点什么…" style="margin-top:10px"></textarea>
+    <div class="note-attach" id="noteAttach"></div>
+    <input id="noteFile" type="file" accept="image/*,*/*" multiple hidden>
+    <button class="btn-ghost" id="noteAttachBtn" type="button" style="margin-top:12px">附加照片或文件</button>
+    <button class="btn" id="noteSave" type="button" style="margin-top:10px">保存</button>
+    <button class="btn-ghost" id="noteDelete" type="button" style="margin-top:8px;color:var(--danger)">删除</button>
+  </div>
 </div>
 <div id="selectBar" class="hidden">
   <button class="btn-ghost" id="selectCancel" type="button">取消</button>
@@ -406,7 +440,7 @@ $("loginForm").addEventListener("submit", (e) => { e.preventDefault(); e.stopPro
 $("mfaForm").addEventListener("submit", (e) => { e.preventDefault(); e.stopPropagation(); doMfa(); return false; });
 const buildInfo = $("buildInfo");
 if (buildInfo) {
-  buildInfo.textContent = native() ? "1.25.0 · 安装包登录" : "请在安装包内登录";
+  buildInfo.textContent = native() ? "1.29.0 · 安装包登录" : "请在安装包内登录";
   buildInfo.className = native() ? "ok hint" : "urgent hint";
 }
 window.addEventListener("error", (e) => {
@@ -525,6 +559,29 @@ function isOverdue(it){
   const d = dueMs(it);
   return d > 0 && d < Date.now();
 }
+function feedDedupeKeys(it){
+  const keys = [];
+  const url = String(it.url||"");
+  const m = url.match(/courses\/(\d+)\/(?:assignments|quizzes)\/(\d+)/);
+  if (m) keys.push("u:"+m[1]+"/"+m[2]);
+  const t = String(it.title||"").replace(/[\s\u3000\[\]【】()（）：:.\-—_]/g,"").replace(/即将到期|作业提醒|作业通知|作业即将到期/g,"");
+  const hw = t.match(/([^0-9]{2,}作业[0-9０-９]{1,3})/);
+  if (hw) keys.push("hw:"+hw[1]);
+  if (t) keys.push("t:"+t);
+  if (!keys.length) keys.push(String(it.id||""));
+  return keys;
+}
+function uniqueFeed(list){
+  const seen = new Set();
+  const out = [];
+  for (const it of list||[]) {
+    const keys = feedDedupeKeys(it);
+    if (keys.some(k => seen.has(k))) continue;
+    keys.forEach(k => seen.add(k));
+    out.push(it);
+  }
+  return out;
+}
 function shanghaiParts(t){
   return Object.fromEntries(new Intl.DateTimeFormat("zh-CN",{
     timeZone:"Asia/Shanghai", year:"numeric", month:"numeric", day:"numeric",
@@ -601,16 +658,15 @@ function render(r){
       return true;
     });
   }
-  const overdue = (feedFilter === "all" || feedFilter === "ddl")
-    ? pool.filter(isOverdue).sort((a,b)=>dueMs(a)-dueMs(b)) : [];
-  const soon = (feedFilter === "all" || feedFilter === "soon")
-    ? pool.filter(isDueSoon).sort((a,b)=>dueMs(a)-dueMs(b)) : [];
+  const overdue = uniqueFeed((feedFilter === "all" || feedFilter === "ddl")
+    ? pool.filter(isOverdue).sort((a,b)=>dueMs(a)-dueMs(b)) : []);
+  const soon = uniqueFeed((feedFilter === "all" || feedFilter === "soon")
+    ? pool.filter(isDueSoon).sort((a,b)=>dueMs(a)-dueMs(b)) : []);
   const specialIds = new Set([...overdue, ...soon].map(it => it.id));
-  let rest = (feedFilter === "all") ? pool.filter(it => !specialIds.has(it.id)) : pool.filter(it => {
-    if (feedFilter === "soon") return isDueSoon(it);
-    if (feedFilter === "ddl") return !isOverdue(it);
-    return true;
-  });
+  let rest;
+  if (feedFilter === "all") rest = pool.filter(it => !specialIds.has(it.id));
+  else if (feedFilter === "soon") rest = [];
+  else rest = pool.filter(it => feedFilter !== "ddl" || !isOverdue(it));
   if (feedFilter === "ddl" || feedFilter === "soon") rest.sort((a,b)=> (dueMs(a)||1e15) - (dueMs(b)||1e15));
   else rest.sort((a,b)=>itemWhen(b)-itemWhen(a));
   const total = overdue.length + soon.length + rest.length;
@@ -630,11 +686,27 @@ function render(r){
   bindFeed();
   renderTable(r.courses||[]);
   const src = r.sources || {};
-  $("health").innerHTML = Object.keys(src).filter(k=>k[0]!=="_").map(k=>{
+  const ORDER = ["math","jwc","elearning","timetable","ehall","mail"];
+  const keys = ORDER.filter(k=>src[k]).concat(Object.keys(src).filter(k=>k[0]!=="_" && ORDER.indexOf(k)<0));
+  $("health").innerHTML = keys.map(k=>{
     const v = src[k];
     return `<p style="margin:4px 0">${esc(sourceLabel(k))} · <span class="${v.ok?"ok":"urgent"}">${v.ok ? Number(v.count)+" 条" : esc(v.error||"失败")}</span></p>`;
   }).join("") || "<p class='hint'>尚无巡检</p>";
   if (src._qr && src._qr.image) applyQr(src._qr);
+  paintBackgroundHealth();
+}
+function paintBackgroundHealth(){
+  if (!native()) return;
+  try {
+    const s = JSON.parse(Danzhi.saved());
+    const last = Number(s.lastBackgroundPollAt||0);
+    const bits = [];
+    if (last>0) bits.push("<p class='hint'>上次后台巡检 "+esc(formatPolledAt(last).replace("上次巡检成功 ",""))+"</p>");
+    else bits.push("<p class='hint'>还没有后台巡检记录。打开巡检并允许通知与无限制电池后，约半分钟内应有首轮。</p>");
+    if (s.backgroundError) bits.push("<p class='urgent hint'>后台："+esc(s.backgroundError)+"</p>");
+    const h = $("health");
+    if (h) h.insertAdjacentHTML("beforeend", bits.join(""));
+  } catch(e){}
 }
 function cardHtml(it){
   const unread = isUnread(it);
@@ -764,7 +836,23 @@ window.onReadItem = function(raw){
   let r; try { r=JSON.parse(raw); } catch(e){ $("readerFrame").srcdoc="<p>无法解析正文</p>"; return; }
   if (r.id && readerId && r.id !== readerId) return;
   if (r.status==="error") { $("readerFrame").srcdoc = "<p style='padding:16px;color:#8f1d22'>"+esc(r.message||"读取失败")+"</p>"; return; }
-  const html = r.html || ("<p>"+esc(r.summary||r.title||"")+"</p>");
+  const it = findItem(readerId) || findItem(r.id) || {};
+  const isMail = (it.source==="mail") || (r.source==="mail") || String(readerId||r.id||"").indexOf("mail")===0;
+  let html = r.html || "";
+  const plain = String(html).replace(/<[^>]+>/g," ").replace(/&nbsp;/g," ").trim();
+  // Only mail items can legitimately hit Tencent session CGI; never show that copy on 教务/数院/办事.
+  if (isMail && /cgi exception|session_timeout|errcode["\s]*:["\s-]*-2/i.test(plain)) {
+    $("readerFrame").srcdoc = "<p style='padding:18px;font:16px/1.65 sans-serif;color:#3B2A24'>邮箱会话已过期。请先点信匣「巡检」再打开这封信，或点右上角「原平台」。</p>";
+    return;
+  }
+  if (!plain || /未能拉取正文/.test(plain)) {
+    const fallback = esc(it.summary || it.title || r.summary || r.title || (isMail ? "这封信暂时没有可展示的正文" : "这条通知没有可展示的摘要"));
+    const tip = isMail
+      ? "可稍后重试，或点右上角「原平台」在腾讯企业邮打开。"
+      : "可点右上角「原平台」查看完整页面。";
+    $("readerFrame").srcdoc = "<p style='padding:18px;font:16px/1.65 sans-serif;color:#3B2A24'>"+fallback+"</p><p style='padding:0 18px;color:#8C7068;font:13px/1.5 sans-serif'>"+tip+"</p>";
+    return;
+  }
   $("readerFrame").srcdoc = "<!doctype html><meta charset='utf-8'><style>body{margin:0;padding:18px;font:16px/1.65 'Noto Sans SC',sans-serif;color:#3B2A24;background:#FFF6F0}img{max-width:100%}a{color:#FF6B57}</style>"+html;
 };
 window.onTrashItems = function(raw){
@@ -827,9 +915,12 @@ function nextCard(courses){
     <p class="hint" style="color:var(--muted);margin:4px 0 0">${esc(hit.location||"")} ${periodLabel(hit.startPeriod,hit.endPeriod)}</p></div>`;
 }
 
+let qrFlight = false;
 function refreshQr(force){
   if (!native()) return;
   const go = !!force;
+  if (qrFlight && !go) return;
+  qrFlight = true;
   if (go) {
     setBusy($("qrBtn"), true, "正在刷新…");
     $("qrHint").textContent = "已点到。正在向一卡通要新码…";
@@ -842,22 +933,24 @@ function refreshQr(force){
     Danzhi.getQr(go ? "1" : "0");
   }
   catch(e) {
+    qrFlight = false;
     setBusy($("qrBtn"), false, "刷新生活码");
     $("qrbox").classList.remove("refreshing");
     $("qrHint").textContent = String(e);
   }
 }
 window.onQr = function(raw){
+  qrFlight = false;
   setBusy($("qrBtn"), false, "刷新生活码");
   $("qrbox").classList.remove("refreshing");
   try {
     const r = JSON.parse(raw);
     if (r.status==="error" && /BUSY/.test(r.message||"")) {
-      $("qrHint").textContent = "上一件事还在进行，即将自动刷新生活码";
-      setTimeout(()=>{ if (!loginInFlight) refreshQr(true); }, 1200);
+      $("qrHint").textContent = "上一件事还在进行，稍后自动刷新生活码";
+      setTimeout(()=>{ if (!loginInFlight && !qrFlight) refreshQr(false); }, 2500);
       return;
     }
-    if (r.status==="error"){ $("qrHint").textContent = r.message||"生活码失败"; $("qrbox").innerHTML='<p class="urgent hint">解码源未拿到。请确认已登录。</p>'; return; }
+    if (r.status==="error"){ $("qrHint").textContent = r.message||"生活码失败"; $("qrbox").innerHTML='<p class="urgent hint">'+(esc(r.message)||"解码源未拿到。请确认已登录。")+'</p>'; return; }
     applyQr(r);
   } catch(e){ $("qrHint").textContent = String(e); }
 };
@@ -924,7 +1017,10 @@ function renderRooms(r){
   lastRooms = r;
   const rooms = r.rooms||[];
   const curN = currentPeriodN();
-  $("roomList").innerHTML = (rooms.length ? rooms.map(room => {
+  const heads = PERIODS.map(p => `<span class="${p.n===curN?"now":""}">${p.n}</span>`).join("");
+  const legend = `<p class="hint">每格是一节课。描边的是当前这节，所有教室同一列。</p>
+    <div class="slot-legend">${heads}</div>`;
+  $("roomList").innerHTML = legend + (rooms.length ? rooms.map(room => {
     const busy = room.busy||[];
     const freeNow = curN ? !busy[curN-1] : (room.freeNow!==false);
     const slots = PERIODS.map(p => `<i class="${busy[p.n-1]?"busy":""} ${p.n===curN?"now":""}"></i>`).join("");
@@ -972,49 +1068,177 @@ $("mailSave").onclick=()=>{if(native())Danzhi.setMailPassword($("mailPassword").
 window.onMailSettings=raw=>{const r=JSON.parse(raw);$("mailSettingsMsg").textContent=r.message||r.status;if(r.status==="ok")$("mailPassword").value="";};
 $("backgroundEnabled").onchange=()=>{if(native())Danzhi.setBackgroundEnabled($("backgroundEnabled").checked);};
 window.onSettings=raw=>{const r=JSON.parse(raw);$("settingsMsg").textContent=r.message||r.status;};
-$("smsPhone").onchange = () => { if (native()) Danzhi.setSmsPhone($("smsPhone").value.trim()); };
+$("smsSave").onclick = () => {
+  const v = $("smsPhone").value.trim();
+  if (v && !/^1\d{10}$/.test(v)) {
+    $("smsMsg").textContent = "请输入 11 位中国大陆手机号，或留空关闭短信";
+    $("smsMsg").className = "urgent hint";
+    return;
+  }
+  if (native()) Danzhi.setSmsPhone(v);
+  $("smsMsg").textContent = v ? ("已确认 "+v+"，新邮件会发短信") : "已清空，不再发短信";
+  $("smsMsg").className = "ok hint";
+  toast(v ? "手机号已确认" : "已关闭短信");
+};
+
+function loadNotes(){
+  try { if (native() && Danzhi.notes) return JSON.parse(Danzhi.notes()||"[]")||[]; } catch(e){}
+  try { return JSON.parse(localStorage.getItem("dz_notes")||"[]")||[]; } catch(e){ return []; }
+}
+function persistNotes(list){
+  const json = JSON.stringify(list||[]);
+  try { localStorage.setItem("dz_notes", json); } catch(e){}
+  try { if (native() && Danzhi.saveNotes) Danzhi.saveNotes(json); } catch(e){}
+}
+let editingNoteId = "";
+function renderNotes(){
+  const list = loadNotes().slice().sort((a,b)=>{
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    return (b.updated||0)-(a.updated||0);
+  });
+  if (!list.length) {
+    $("noteList").innerHTML = '<p class="hint">还没有笔记。点「写一条」记下作业、闸机提醒或临时想法。</p>';
+    return;
+  }
+  $("noteList").innerHTML = list.map(n => {
+    const att = (n.attachments||[]).length ? ` · ${n.attachments.length} 个附件` : "";
+    return `<article class="card" data-note="${esc(n.id)}">
+      ${n.pinned?'<span class="stamp">置顶</span>':''}
+      <strong style="display:block;padding-right:52px">${esc(n.title||"未命名")}</strong>
+      <p class="hint">${esc((n.body||"").slice(0,80))}${att}</p>
+    </article>`;
+  }).join("");
+  $("noteList").onclick = (e) => {
+    const art = e.target.closest("[data-note]");
+    if (art) openNote(art.dataset.note);
+  };
+}
+function blankNote(){
+  return { id: "n-"+Date.now().toString(36)+"-"+Math.random().toString(36).slice(2,6), title:"", body:"", pinned:false, attachments:[], created:Date.now(), updated:Date.now() };
+}
+function openNote(id){
+  const list = loadNotes();
+  let n = list.find(x => x.id===id);
+  if (!n) { n = blankNote(); }
+  editingNoteId = n.id;
+  $("noteTitle").value = n.title||"";
+  $("noteBody").value = n.body||"";
+  $("notePinBtn").textContent = n.pinned ? "取消置顶" : "置顶";
+  $("notePadTitle").textContent = n.title ? n.title : "新笔记";
+  drawNoteAttach(n.attachments||[]);
+  $("notePad").classList.remove("hidden");
+}
+function currentDraft(){
+  return {
+    id: editingNoteId || blankNote().id,
+    title: $("noteTitle").value.trim(),
+    body: $("noteBody").value,
+    pinned: $("notePinBtn").textContent === "取消置顶",
+    attachments: window.__noteAtt || [],
+    updated: Date.now()
+  };
+}
+function drawNoteAttach(atts){
+  window.__noteAtt = atts || [];
+  $("noteAttach").innerHTML = window.__noteAtt.map((a,i) => {
+    if ((a.mime||"").indexOf("image/")===0 && a.data)
+      return `<img src="${esc(a.data)}" alt="${esc(a.name||"图")}" data-i="${i}">`;
+    return `<span class="file" data-i="${i}">${esc(a.name||"文件")}</span>`;
+  }).join("");
+  $("noteAttach").onclick = (e) => {
+    const el = e.target.closest("[data-i]");
+    if (!el) return;
+    const i = Number(el.dataset.i);
+    window.__noteAtt = (window.__noteAtt||[]).filter((_,idx)=>idx!==i);
+    drawNoteAttach(window.__noteAtt);
+    toast("已去掉附件");
+  };
+}
+function saveCurrentNote(){
+  const draft = currentDraft();
+  if (!draft.title && !draft.body && !(draft.attachments||[]).length) { toast("空笔记未保存"); return; }
+  if (!draft.title) draft.title = (draft.body||"未命名").slice(0,18);
+  const list = loadNotes();
+  const idx = list.findIndex(x => x.id===draft.id);
+  if (idx>=0) { draft.created = list[idx].created||draft.updated; list[idx]=draft; }
+  else list.unshift(draft);
+  persistNotes(list);
+  renderNotes();
+  toast("已保存");
+}
+function closeNotePad(){ $("notePad").classList.add("hidden"); editingNoteId=""; }
+$("noteNew").onclick = () => openNote("");
+$("noteBack").onclick = () => { saveCurrentNote(); closeNotePad(); };
+$("noteSave").onclick = () => { saveCurrentNote(); closeNotePad(); };
+$("notePinBtn").onclick = () => {
+  $("notePinBtn").textContent = $("notePinBtn").textContent === "取消置顶" ? "置顶" : "取消置顶";
+};
+$("noteDelete").onclick = () => {
+  const list = loadNotes().filter(x => x.id !== editingNoteId);
+  persistNotes(list);
+  renderNotes();
+  closeNotePad();
+  toast("已删除");
+};
+$("noteAttachBtn").onclick = () => $("noteFile").click();
+$("noteFile").onchange = () => {
+  const files = [...($("noteFile").files||[])];
+  $("noteFile").value = "";
+  files.forEach(file => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const mime = file.type || "application/octet-stream";
+      const data = String(reader.result||"");
+      if (mime.indexOf("image/")===0) {
+        const img = new Image();
+        img.onload = () => {
+          const max = 960;
+          let w = img.width, h = img.height;
+          if (w>max || h>max) { const s = max/Math.max(w,h); w=Math.round(w*s); h=Math.round(h*s); }
+          const c = document.createElement("canvas"); c.width=w; c.height=h;
+          c.getContext("2d").drawImage(img,0,0,w,h);
+          const packed = c.toDataURL("image/jpeg", 0.72);
+          window.__noteAtt = (window.__noteAtt||[]).concat([{name:file.name, mime:"image/jpeg", data:packed}]);
+          drawNoteAttach(window.__noteAtt);
+        };
+        img.src = data;
+      } else {
+        if (data.length > 350000) { toast("文件偏大，请换一张压缩图或更小的文件"); return; }
+        window.__noteAtt = (window.__noteAtt||[]).concat([{name:file.name, mime, data}]);
+        drawNoteAttach(window.__noteAtt);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+};
 
 const THEMES = {
-  peach:{bg:"#FFF6F0",elev:"#FFFFFF",surface:"#FFE8DC",fg:"#3B2A24",muted:"#8C7068",subtle:"#B59A92",primary:"#FF7B6A",on:"#FFFFFF",danger:"#FF5A6A",ok:"#5CB87A",busy:"#FF7A7A"},
-  mint:{bg:"#F3FBF5",elev:"#FFFFFF",surface:"#D7F0DF",fg:"#1F3D2B",muted:"#5E7F6A",subtle:"#8AA894",primary:"#3BA56A",on:"#FFFFFF",danger:"#D94848",ok:"#2F8A52",busy:"#E07A7A"},
-  matcha:{bg:"#F4F7F0",elev:"#FFFFFF",surface:"#E3EBD6",fg:"#2C3324",muted:"#6D7A62",subtle:"#97A38A",primary:"#6B8F71",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
-  sky:{bg:"#F3F7FD",elev:"#FFFFFF",surface:"#DCE8FA",fg:"#1E2A44",muted:"#5C6F8C",subtle:"#8A9BB3",primary:"#3D7EEA",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  ocean:{bg:"#F0FAFA",elev:"#FFFFFF",surface:"#D3EFEF",fg:"#163536",muted:"#4E7373",subtle:"#7A9A9A",primary:"#1D9A9A",on:"#FFFFFF",danger:"#D94848",ok:"#2F8A52",busy:"#E07A7A"},
-  grape:{bg:"#F7F3FB",elev:"#FFFFFF",surface:"#E8DFF3",fg:"#2C2438",muted:"#6E6280",subtle:"#9A8EAA",primary:"#7B5EA7",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  rose:{bg:"#FDF4F6",elev:"#FFFFFF",surface:"#F6DDE4",fg:"#3A242C",muted:"#8A6670",subtle:"#B3929A",primary:"#C45C7A",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  sand:{bg:"#FBF6EC",elev:"#FFFFFF",surface:"#F0E4C8",fg:"#3A3120",muted:"#8A7A58",subtle:"#B3A47E",primary:"#C4A35A",on:"#3A3120",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
-  paper:{bg:"#F6F0E6",elev:"#FFFaf3",surface:"#EFE4D4",fg:"#3B2A24",muted:"#8C7068",subtle:"#B59A92",primary:"#C45C4A",on:"#FFFFFF",danger:"#B4232A",ok:"#2F8A52",busy:"#C45C4A"},
-  ink:{bg:"#161412",elev:"#221E1B",surface:"#2C2723",fg:"#F4EDE6",muted:"#B7A79E",subtle:"#8C7C74",primary:"#FF8A76",on:"#1A120F",danger:"#FF7A86",ok:"#7ED09A",busy:"#FF8A76"},
-  blossom:{bg:"#FDF4F7",elev:"#FFFFFF",surface:"#F8DDE6",fg:"#3A2430",muted:"#8A6674",subtle:"#B3929E",primary:"#E88BA8",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  dusk:{bg:"#FBF4EC",elev:"#FFFFFF",surface:"#F3DFC8",fg:"#3A2A1C",muted:"#8A6E54",subtle:"#B39A7E",primary:"#E07A3D",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
-  aurora:{bg:"#F0FAF7",elev:"#FFFFFF",surface:"#D3EFE8",fg:"#16362F",muted:"#4E7368",subtle:"#7A9A90",primary:"#3DB8A0",on:"#FFFFFF",danger:"#D94848",ok:"#2F8A52",busy:"#E07A7A"},
-  lilac:{bg:"#F6F3FB",elev:"#FFFFFF",surface:"#E6DFF3",fg:"#2C2438",muted:"#6E6280",subtle:"#9A8EAA",primary:"#8B7CC9",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  caramel:{bg:"#FBF6F0",elev:"#FFFFFF",surface:"#F0E0D0",fg:"#3A2A20",muted:"#8A6E58",subtle:"#B39A82",primary:"#B56B3A",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
-  bamboo:{bg:"#F3F7F2",elev:"#FFFFFF",surface:"#DCE8D8",fg:"#243028",muted:"#5E7364",subtle:"#8A9A8E",primary:"#4F8F62",on:"#FFFFFF",danger:"#C45C4A",ok:"#2F8A52",busy:"#E07A7A"},
-  cloud:{bg:"#F4F5F7",elev:"#FFFFFF",surface:"#E2E5EA",fg:"#242830",muted:"#5C6570",subtle:"#8A919A",primary:"#6B7380",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  berry:{bg:"#FDF3F5",elev:"#FFFFFF",surface:"#F6D9E0",fg:"#3A2026",muted:"#8A5E68",subtle:"#B38A92",primary:"#C43D5B",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  cream:{bg:"#FFF9EE",elev:"#FFFFFF",surface:"#F5E6C8",fg:"#3A2F1C",muted:"#8A7A58",subtle:"#B3A47E",primary:"#E8C47A",on:"#3A2F1C",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
-  soda:{bg:"#F0F7FD",elev:"#FFFFFF",surface:"#D6EAF8",fg:"#1C2E3A",muted:"#5C7388",subtle:"#8A9BB0",primary:"#5AB0E8",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  milktea:{bg:"#FBF6F1",elev:"#FFFFFF",surface:"#F0E0D4",fg:"#3A2A22",muted:"#8A6E60",subtle:"#B39A8A",primary:"#C48A6A",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
-  moon:{bg:"#F4F6FB",elev:"#FFFFFF",surface:"#E2E7F2",fg:"#242A38",muted:"#5C6578",subtle:"#8A91A4",primary:"#8FA2C4",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  tangerine:{bg:"#FFF6EE",elev:"#FFFFFF",surface:"#F8E0CC",fg:"#3A2A1C",muted:"#8A6E54",subtle:"#B39A7E",primary:"#F08A4B",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
-  lotus:{bg:"#FDF4F8",elev:"#FFFFFF",surface:"#F6DDE8",fg:"#3A2430",muted:"#8A6674",subtle:"#B3929E",primary:"#D98CB3",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  celeste:{bg:"#F2FAF8",elev:"#FFFFFF",surface:"#D5EDE8",fg:"#1C3330",muted:"#5A7A74",subtle:"#8AA8A2",primary:"#6AA8A0",on:"#FFFFFF",danger:"#D94848",ok:"#2F8A52",busy:"#E07A7A"},
-  persimmon:{bg:"#FFF4F0",elev:"#FFFFFF",surface:"#F8D8D0",fg:"#3A241E",muted:"#8A6458",subtle:"#B39288",primary:"#E85D4C",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#E07A7A"},
-  night:{bg:"#1C1524",elev:"#2A2034",surface:"#3A2C48",fg:"#F6EEF6",muted:"#C4B0C8",subtle:"#9A88A4",primary:"#E89AC0",on:"#1C1524",danger:"#FF8A96",ok:"#7ED09A",busy:"#E89AC0"},
-  mist:{bg:"#F3F6FB",elev:"#FFFFFF",surface:"#DEE6F2",fg:"#243044",muted:"#5C6E88",subtle:"#8A9AB0",primary:"#7A90B4",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  strawberry:{bg:"#FFF3F5",elev:"#FFFFFF",surface:"#F8D4DC",fg:"#3A1E24",muted:"#8A5A64",subtle:"#B38A92",primary:"#E24B6A",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  lemon:{bg:"#FFFBEA",elev:"#FFFFFF",surface:"#F4E8B8",fg:"#3A3420",muted:"#8A7A48",subtle:"#B3A46E",primary:"#D6B23A",on:"#3A3420",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"},
-  taro:{bg:"#F7F3FB",elev:"#FFFFFF",surface:"#E6D8F0",fg:"#2C2438",muted:"#6E6280",subtle:"#9A8EAA",primary:"#9A7AB8",on:"#FFFFFF",danger:"#D94848",ok:"#3BA56A",busy:"#E07A7A"},
-  oat:{bg:"#F8F4EE",elev:"#FFFFFF",surface:"#EBE0D0",fg:"#3A3024",muted:"#8A7A68",subtle:"#B3A494",primary:"#B89A78",on:"#FFFFFF",danger:"#C45C4A",ok:"#5A8A62",busy:"#D08A7A"}
+  peach:{style:"peach",bg:"#FFF6F0",elev:"#FFFFFF",surface:"#FFE8DC",fg:"#3B2A24",muted:"#8C7068",subtle:"#B59A92",primary:"#FF7B6A",on:"#FFFFFF",danger:"#FF5A6A",ok:"#5CB87A",busy:"#FF7A7A"},
+  paper:{style:"paper",bg:"#F3EBD8",elev:"#FFF8EC",surface:"#E8DCC4",fg:"#2A2118",muted:"#7A6A52",subtle:"#A89878",primary:"#A33B2B",on:"#FFF8EC",danger:"#8C1D1D",ok:"#3F6B45",busy:"#C45C4A"},
+  glass:{style:"glass",bg:"#EEF3F8",elev:"#F7FBFF",surface:"#D9E6F2",fg:"#1C2A38",muted:"#5C7388",subtle:"#8A9BB0",primary:"#3D7EEA",on:"#FFFFFF",danger:"#D94848",ok:"#2F8A52",busy:"#E07A7A"},
+  campus:{style:"campus",bg:"#F4F6FA",elev:"#FFFFFF",surface:"#E4EAF4",fg:"#0B2C7A",muted:"#4A5C86",subtle:"#7A88A8",primary:"#C8102E",on:"#FFFFFF",danger:"#C8102E",ok:"#2F6B4A",busy:"#C45C4A"},
+  ink:{style:"ink",bg:"#161412",elev:"#221E1B",surface:"#2C2723",fg:"#F4EDE6",muted:"#B7A79E",subtle:"#8C7C74",primary:"#FF8A76",on:"#1A120F",danger:"#FF7A86",ok:"#7ED09A",busy:"#FF8A76"},
+  night:{style:"night",bg:"#1C1524",elev:"#2A2034",surface:"#3A2C48",fg:"#F6EEF6",muted:"#C4B0C8",subtle:"#9A88A4",primary:"#E89AC0",on:"#1C1524",danger:"#FF8A96",ok:"#7ED09A",busy:"#E89AC0"}
+};
+const THEME_ALIAS = {
+  mint:"peach", matcha:"campus", sky:"glass", ocean:"glass", grape:"night",
+  rose:"peach", sand:"paper", blossom:"peach", dusk:"peach", aurora:"glass",
+  lilac:"night", caramel:"paper", bamboo:"campus", cloud:"glass", berry:"peach",
+  cream:"paper", soda:"glass", milktea:"peach", moon:"glass", tangerine:"peach",
+  lotus:"night", celeste:"glass", persimmon:"peach", mist:"glass",
+  strawberry:"peach", lemon:"paper", taro:"night", oat:"paper"
 };
 function applyTheme(name, persist){
-  const t = THEMES[name] || THEMES.peach;
+  const key = THEMES[name] ? name : (THEME_ALIAS[name] || "peach");
+  const t = THEMES[key] || THEMES.peach;
   const root = document.documentElement;
-  Object.keys(t).forEach(k => root.style.setProperty("--"+k, t[k]));
-  root.style.setProperty("--shadow", name==="ink" ? "0 10px 28px rgba(0,0,0,.35)" : "0 10px 28px rgba(255,107,87,.12)");
-  document.querySelectorAll("#themeChips button").forEach(b => b.classList.toggle("on", b.dataset.theme===name));
-  try { if (persist !== false) localStorage.setItem("dz_theme", name); } catch(e){}
+  Object.keys(t).forEach(k => { if (k!=="style") root.style.setProperty("--"+k, t[k]); });
+  root.setAttribute("data-style", t.style || key);
+  const dark = key==="ink" || key==="night";
+  root.style.setProperty("--shadow", dark ? "0 10px 28px rgba(0,0,0,.35)" : (key==="paper"||key==="campus" ? "none" : "0 10px 28px rgba(255,107,87,.12)"));
+  root.style.setProperty("--border", dark ? "rgba(244,237,230,.12)" : "rgba(59,42,36,.10)");
+  document.querySelectorAll("#themeChips button").forEach(b => b.classList.toggle("on", b.dataset.theme===key));
+  try { if (persist !== false) localStorage.setItem("dz_theme", key); } catch(e){}
 }
 $("themeChips").onclick = (e) => {
   const b = e.target.closest("button");
@@ -1029,19 +1253,22 @@ document.querySelectorAll(".nav button").forEach(b => {
     document.querySelectorAll(".nav button").forEach(x=>x.classList.remove("on"));
     b.classList.add("on");
     const tab = b.dataset.tab;
-    ["feed","table","pass","rooms","set"].forEach(k => $(k).classList.toggle("hidden", k!==tab));
-    if (tab==="pass") refreshQr(true);
+    ["feed","table","pass","rooms","notes","set"].forEach(k => $(k).classList.toggle("hidden", k!==tab));
+    if (tab==="pass") refreshQr(false);
     if (tab==="rooms") { loadBuildings(); queryRooms(); }
     if (tab==="table" && lastPoll) renderTable(lastPoll.courses||[]);
+    if (tab==="notes") renderNotes();
+    if (tab==="set") paintBackgroundHealth();
   };
 });
 
 setInterval(() => { if (lastPoll) renderTable(lastPoll.courses||[]); }, 30000);
 setInterval(() => {
-  if (!$("pass").classList.contains("hidden") && !$("app").classList.contains("hidden")) refreshQr(true);
-}, 25000);
+  if (!$("pass").classList.contains("hidden") && !$("app").classList.contains("hidden")) refreshQr(false);
+}, 20000);
 
 window.danzhiBack = function(){
+  if ($("notePad") && !$("notePad").classList.contains("hidden")) { closeNotePad(); return true; }
   if ($("reader") && !$("reader").classList.contains("hidden")) { closeReader(); return true; }
   if (selectMode) { exitSelect(); return true; }
   if ($("mfa") && !$("mfa").classList.contains("hidden")) { show("login"); return true; }
@@ -1092,6 +1319,12 @@ try {
     if (s.version) $("setVer").textContent = "版本 " + s.version;
     if (s.hasSession) show("app");
     if (s.lastPoll) render(s.lastPoll);
+    try {
+      if (Danzhi.notes) {
+        const n = Danzhi.notes();
+        if (n && n.length > 2) localStorage.setItem("dz_notes", n);
+      }
+    } catch(e) {}
   }
 } catch(e) {}
 </script>

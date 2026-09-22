@@ -9,6 +9,12 @@ import java.util.*;
 import java.util.zip.GZIPInputStream;
 
 final class Http {
+    static {
+        try {
+            System.setProperty("http.keepAlive", "false");
+            System.setProperty("http.maxConnections", "4");
+        } catch (SecurityException ignored) {}
+    }
     // Package-private instrumentation seam. Release builds cannot enable fixture transport.
     private static volatile WebFlow.Transport testTransport;
     static void useTestTransport(WebFlow.Transport transport) {
@@ -41,19 +47,53 @@ final class Http {
             WebFlow.Response response = fixture.request(new WebFlow.Request(target,method,ct,body,timeout));
             return new Resp(response.code,response.body,response.url,response.location,response.link);
         }
+        IOException lastIo=null;
+        int attempts="POST".equalsIgnoreCase(method)?3:5;
+        for(int attempt=0;attempt<attempts;attempt++){
+            if(attempt>0){
+                try { Thread.sleep(220L*attempt); } catch(InterruptedException ie){ Thread.currentThread().interrupt(); throw ie; }
+            }
+            try {
+                return fetchOnce(jar,original,target,method,ct,body,timeout,referer,ua,attempt>0);
+            } catch(IOException e){
+                lastIo=e;
+                String m=e.getMessage()==null?"":e.getMessage().toLowerCase(Locale.ROOT);
+                boolean stale=m.contains("unexpected end of stream")||m.contains("connection reset")
+                        ||m.contains("broken pipe")||m.contains("connection closed")||m.contains("software caused connection abort")
+                        ||m.contains("gzip")||e instanceof java.util.zip.ZipException;
+                if(!stale && attempt+1>=attempts) throw e;
+                if(!stale && attempt==0) continue;
+            }
+        }
+        if(lastIo!=null) throw lastIo;
+        throw new IOException("empty http attempt");
+    }
+    private static Resp fetchOnce(CookieJar jar,String original,String target,String method,String ct,String body,int timeout,String referer,String ua,boolean skipGzip) throws Exception {
         HttpURLConnection c=(HttpURLConnection)new URL(target).openConnection();
         try{
             c.setInstanceFollowRedirects(false);c.setConnectTimeout(timeout);c.setReadTimeout(timeout);c.setRequestMethod(method);
             c.setUseCaches(false);
+            c.setRequestProperty("Connection","close");
             String agent=ua!=null&&!ua.isEmpty()?ua:UA;
             c.setRequestProperty("User-Agent",agent);
             c.setRequestProperty("Cache-Control","no-cache, no-store");
             c.setRequestProperty("Pragma","no-cache");
             String originalHost=WebFlow.host(original);
             boolean lan="10.64.130.6".equals(originalHost);
-            c.setRequestProperty("Accept",lan?"*/*":"application/json, text/html, */*");
+            boolean api=original.contains("/api/")||original.contains(".json")||original.contains("/cgi-bin/");
+            boolean printData=original.contains("/print-data");
+            boolean getData=original.contains("/get-data");
+            boolean jwgl=originalHost.contains("fdjwgl")||original.contains("course-table");
+            boolean elearn=originalHost.contains("elearning");
+            String accept;
+            if(lan) accept="*/*";
+            else if(getData) accept="application/json, text/javascript, */*;q=0.1";
+            else if(printData || jwgl) accept="text/html,application/xhtml+xml,*/*;q=0.8";
+            else if(api) accept="application/json, */*;q=0.8";
+            else accept="text/html,application/xhtml+xml,*/*;q=0.8";
+            c.setRequestProperty("Accept", accept);
             c.setRequestProperty("Accept-Language","zh-CN,zh;q=0.9");
-            if(!lan)c.setRequestProperty("Accept-Encoding","gzip");
+            if(!lan && !skipGzip && !elearn && !printData)c.setRequestProperty("Accept-Encoding","gzip");
             String cookie=jar.headerFor(target);if(!cookie.isEmpty())c.setRequestProperty("Cookie",cookie);
             if(target.contains("/cgi-bin/login")
                     || target.contains("t=mail_list.json")
@@ -84,7 +124,10 @@ final class Http {
             int code=c.getResponseCode();jar.absorb(target,c.getHeaderFields());
             String text="";InputStream input=code>=400?c.getErrorStream():c.getInputStream();
             if(input!=null){
-                if("gzip".equalsIgnoreCase(c.getContentEncoding()))input=new GZIPInputStream(input);
+                if("gzip".equalsIgnoreCase(c.getContentEncoding())){
+                    try { input=new GZIPInputStream(input); }
+                    catch(java.util.zip.ZipException e){ throw new IOException("gzip", e); }
+                }
                 try(InputStream in=input){
                     byte[] raw=readBytes(in);
                     text=new String(raw, charsetOf(c.getContentType(), originalHost, raw));

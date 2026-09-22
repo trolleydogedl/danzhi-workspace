@@ -16,11 +16,20 @@ public class AlarmReceiver extends BroadcastReceiver {
         SharedPreferences sp = ctx.getSharedPreferences("danzhi", Context.MODE_PRIVATE);
         if (!sp.getBoolean("backgroundEnabled", false) || !sp.getBoolean("hasSession", false)) return;
         long period = Math.max(15, sp.getInt("intervalMin", 15)) * 60_000L;
+        long now = System.currentTimeMillis();
+        long nextAt = sp.getLong("alarmNextAt", 0L);
+        // Login/start/enqueuePoll all call schedule(). Keep the soon first fire; do not replace it with 15 min.
+        if (nextAt > now + 8_000L && nextAt <= now + period + 5_000L) return;
+        long lastPollAt = sp.getLong("lastBackgroundPollAt", 0L);
+        boolean overdue = lastPollAt == 0L || now - lastPollAt >= Math.max(20_000L, period / 2);
+        long delay = overdue ? Math.min(period, 25_000L) : period;
+        long fireAt = now + delay;
+        sp.edit().putLong("alarmScheduledAt", now).putLong("alarmNextAt", fireAt).apply();
         Intent i = new Intent(ctx, AlarmReceiver.class).setAction(ACTION);
         PendingIntent pi = PendingIntent.getBroadcast(ctx, 7, i, PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         AlarmManager am = ctx.getSystemService(AlarmManager.class);
         if (am == null) return;
-        long at = SystemClock.elapsedRealtime() + period;
+        long at = SystemClock.elapsedRealtime() + delay;
         try {
             if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
                 am.setAndAllowWhileIdle(AlarmManager.ELAPSED_REALTIME_WAKEUP, at, pi);
@@ -39,12 +48,14 @@ public class AlarmReceiver extends BroadcastReceiver {
         AlarmManager am = ctx.getSystemService(AlarmManager.class);
         if (am != null) am.cancel(pi);
         pi.cancel();
+        ctx.getSharedPreferences("danzhi", Context.MODE_PRIVATE).edit().remove("alarmNextAt").apply();
     }
 
     @Override public void onReceive(Context ctx, Intent intent) {
         if (intent == null || !ACTION.equals(intent.getAction())) return;
         SharedPreferences sp = ctx.getSharedPreferences("danzhi", Context.MODE_PRIVATE);
         if (!sp.getBoolean("backgroundEnabled", false) || !sp.getBoolean("hasSession", false)) return;
+        sp.edit().remove("alarmNextAt").apply();
         KeepAliveService.enqueuePoll(ctx);
         schedule(ctx);
     }

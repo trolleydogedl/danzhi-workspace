@@ -16,7 +16,15 @@ public final class CookieStore {
     public synchronized void clear(){entries.clear();}
     public synchronized List<Entry> snapshot(){List<Entry> out=new ArrayList<>();for(Entry e:entries)out.add(e.copy());return out;}
     public synchronized void restore(List<Entry> data,long now){
-        entries.clear();for(Entry e:data)if(e.name!=null&&e.value!=null&&e.domain!=null&&e.path!=null&&(e.expiresAt<0||e.expiresAt>now))entries.add(e.copy());
+        entries.clear();
+        if(data==null)return;
+        LinkedHashMap<String,Entry> map=new LinkedHashMap<>();
+        for(Entry e:data){
+            if(e==null||e.name==null||e.value==null||e.domain==null||e.path==null)continue;
+            if(e.expiresAt>=0&&e.expiresAt<=now)continue;
+            map.put(e.name+"\n"+e.domain+"\n"+e.path,e.copy());
+        }
+        entries.addAll(map.values());
     }
     public synchronized void absorb(String url,Map<String,List<String>> headers,long now){
         if(headers==null)return;
@@ -39,6 +47,7 @@ public final class CookieStore {
                         if(e.name.startsWith("__Host-")&&(!e.secure||!e.hostOnly||!e.path.equals("/")||!"https".equals(u.getScheme())))continue;
                         entries.removeIf(x->x.name.equals(e.name)&&x.domain.equals(e.domain)&&x.path.equals(e.path));
                         if(e.expiresAt<0||e.expiresAt>now)entries.add(e);
+                        while(entries.size()>120) entries.remove(0);
                     }
                 }catch(IllegalArgumentException ignored){/* malformed Set-Cookie is not a login success */}
             }

@@ -20,5 +20,6 @@ Path("tests/ui.js").write_text("\n".join(re.findall(r"<script\b[^>]*>(.*?)</scri
 PY
 node --check tests/ui.js
 printf 'PASS: node --check on scripts extracted from the candidate HTML\n' > reports/js-syntax.txt
+export CHROMIUM_PATH="${CHROMIUM_PATH:-/opt/pw-browsers/chromium_headless_shell-1243/chrome-headless-shell-linux64/chrome-headless-shell}"
 python3 tests/test_ui.py | tee reports/ui-tests.txt
 printf '\nHost test run complete. Android SDK build / ART / real accounts were NOT exercised.\n'

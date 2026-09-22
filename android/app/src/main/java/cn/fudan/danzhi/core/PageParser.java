@@ -53,26 +53,44 @@ public final class PageParser {
     public static String qrPayload(String html) {
         if(html==null)return "";
         Matcher m=Pattern.compile("(?is)<input\\b([^>]*)>").matcher(html);
-        while(m.find()){String id=attr(m.group(1),"id");if(id.equals("myText")||id.equals("qrcode")||id.equals("qrCode")||id.equals("qrtext"))return attr(m.group(1),"value");}
+        while(m.find()){
+            String attrs=m.group(1);
+            String id=attr(attrs,"id");
+            String name=attr(attrs,"name");
+            if(id.equals("myText")||id.equals("qrcode")||id.equals("qrCode")||id.equals("qrtext")
+                    ||id.equalsIgnoreCase("code_content")||name.equals("myText")||name.equals("qrcode")
+                    ||name.equalsIgnoreCase("code_content")||name.equals("qrCode")){
+                String v=attr(attrs,"value");
+                if(!v.isEmpty()) return v;
+            }
+        }
         m=Pattern.compile("QRCode\\.toCanvas\\([^,]+,\\s*([\"'])([^\"'\\\\]+)\\1").matcher(html);
+        if(m.find()) return entities(m.group(2));
+        m=Pattern.compile("(?is)new\\s+QRCode\\([^,]+,\\s*\\{[^}]{0,400}?text\\s*:\\s*([\"'])([^\"']+)\\1").matcher(html);
         if(m.find()) return entities(m.group(2));
         String fromJson=qrPayloadJson(html);
         if(!fromJson.isEmpty()) return fromJson;
-        m=Pattern.compile("(?:qrcode|qrCode|qr_code|code_content|qrContent)\\s*[:=]\\s*['\"]([A-Za-z0-9_\\-/=+]{12,})['\"]").matcher(html);
+        m=Pattern.compile("(?:qrcode|qrCode|qr_code|code_content|qrContent|lifeCode|identityCode)\\s*[:=]\\s*['\"]([A-Za-z0-9_\\-/=+]{12,})['\"]").matcher(html);
         return m.find()?m.group(1):"";
     }
     /** JSON from ecard AJAX: {qrcode|code|content|data}. */
     public static String qrPayloadJson(String body) {
         if(body==null||body.isEmpty())return "";
         String t=unwrapCgi(body);
-        Matcher m=Pattern.compile("\"(?:qrcode|qrCode|qr_code|qrCodeStr|myText|barcode|payload|qrContent|code_content|qr)\"\\s*:\\s*\"([^\"]{8,})\"").matcher(t);
-        if(m.find()) return entities(m.group(1));
+        Matcher m=Pattern.compile("\"(?:qrcode|qrCode|qr_code|qrCodeStr|myText|barcode|payload|qrContent|code_content|qr|codeValue|barCode|identityCode|lifeCode|fudanCode|FudanQr)\"\\s*:\\s*\"([^\"]{8,})\"").matcher(t);
+        if(m.find()) return entities(unescapeJson(m.group(1)));
+        m=Pattern.compile("['\"](?:qrcode|qrCode|qr_code|myText|code_content|qrContent|lifeCode)['\"]\\s*:\\s*['\"]([^'\"]{8,})['\"]").matcher(t);
+        if(m.find()) return entities(unescapeJson(m.group(1)));
         m=Pattern.compile("\"(?:qrcode|qrCode|qr_code|myText|code|content|payload|qr)\"\\s*:\\s*\"([^\"]{8,})\"").matcher(t);
-        if(m.find()) return entities(m.group(1));
+        if(m.find()){
+            String v=entities(unescapeJson(m.group(1)));
+            if(v.length()>=12 && !v.matches("\\d{1,8}") && !v.equalsIgnoreCase("ok") && !v.equalsIgnoreCase("success"))
+                return v;
+        }
         m=Pattern.compile("\"data\"\\s*:\\s*\"([A-Za-z0-9_\\-/=+]{12,})\"").matcher(t);
         if(m.find()) return m.group(1);
-        m=Pattern.compile("\"data\"\\s*:\\s*\\{[^}]{0,400}?\"(?:qrcode|qrCode|code|content|qr)\"\\s*:\\s*\"([^\"]{8,})\"").matcher(t);
-        if(m.find()) return entities(m.group(1));
+        m=Pattern.compile("\"data\"\\s*:\\s*\\{[^}]{0,800}?\"(?:qrcode|qrCode|code|content|qr|myText)\"\\s*:\\s*\"([^\"]{8,})\"").matcher(t);
+        if(m.find()) return entities(unescapeJson(m.group(1)));
         String trim=t.trim();
         if(trim.matches("[A-Za-z0-9_\\-/=+]{16,512}") && !trim.contains(" ")) return trim;
         return "";
@@ -311,11 +329,19 @@ public final class PageParser {
         if(html==null||html.isEmpty()) return out;
         Set<String> seen=new HashSet<>();
         Matcher inp=Pattern.compile("(?is)<input\\b([^>]*)>").matcher(html);
-        while(inp.find() && out.size()<40){
+        List<int[]> spans=new ArrayList<>();
+        List<String> attrList=new ArrayList<>();
+        while(inp.find()){
             String attrs=inp.group(1);
             if(!"mailid".equalsIgnoreCase(attr(attrs,"name"))) continue;
             String mailid=attr(attrs,"value");
-            if(mailid.isEmpty()||!seen.add(mailid)) continue;
+            if(mailid.isEmpty()||mailid.length()<8||!seen.add(mailid)) continue;
+            spans.add(new int[]{inp.start(), inp.end()});
+            attrList.add(attrs);
+        }
+        for(int i=0;i<attrList.size() && out.size()<200;i++){
+            String attrs=attrList.get(i);
+            String mailid=attr(attrs,"value");
             String fn=attr(attrs,"fn");
             String fa=attr(attrs,"fa");
             String unreadRaw=attr(attrs,"unread");
@@ -329,10 +355,16 @@ public final class PageParser {
             if(!totime.isEmpty()){
                 try { when=Long.parseLong(totime.trim()); } catch(NumberFormatException ignored) {}
             }
-            String title="";
-            int from=inp.end();
-            String window=html.substring(from, Math.min(html.length(), from+3200));
-            title=firstClassText(window, "(?:black\\s+s1|s1\\s+black)");
+            int from=spans.get(i)[1];
+            int rowEnd=Math.min(html.length(), from+800);
+            if(i+1<spans.size()) rowEnd=Math.min(rowEnd, spans.get(i+1)[0]);
+            Matcher tr=Pattern.compile("(?i)</tr>").matcher(html);
+            tr.region(from, Math.min(html.length(), from+2500));
+            if(tr.find()) rowEnd=Math.min(rowEnd, tr.end());
+            String window=html.substring(from, Math.max(from, rowEnd));
+            String title=attr(attrs,"tt");
+            if(junkMailTitle(title)) title=attr(attrs,"subject");
+            if(junkMailTitle(title)) title=firstClassText(window, "(?:black\\s+s1|s1\\s+black)");
             if(junkMailTitle(title)) title=firstClassText(window, "(?:gt\\s+tf|tf\\s+gt)");
             if(junkMailTitle(title)) title=firstClassText(window, "\\bblack\\b");
             if(junkMailTitle(title)){
@@ -360,5 +392,135 @@ public final class PageParser {
         if(s.contains("共") && s.contains("封")) return true;
         if(s.contains("收件箱")||s.contains("新窗口")||s.contains("读信")) return true;
         return false;
+    }
+    public static String unescapeJson(String s) {
+        if(s==null||s.isEmpty()) return "";
+        StringBuilder b=new StringBuilder(s.length());
+        for(int i=0;i<s.length();i++){
+            char c=s.charAt(i);
+            if(c=='\\' && i+1<s.length()){
+                char n=s.charAt(++i);
+                switch(n){
+                    case 'n': b.append('\n'); break;
+                    case 't': b.append('\t'); break;
+                    case 'r': b.append('\r'); break;
+                    case '"': case '\'': case '\\': case '/': b.append(n); break;
+                    case 'u':
+                        if(i+4<s.length()){
+                            try { b.append((char)Integer.parseInt(s.substring(i+1,i+5),16)); i+=4; }
+                            catch(NumberFormatException e){ b.append('u'); }
+                        } else b.append('u');
+                        break;
+                    default: b.append(n);
+                }
+            } else b.append(c);
+        }
+        return b.toString();
+    }
+    /** Inbox size from mail_list.json. -1 if unknown. */
+    public static int mailListTotal(String body) {
+        int n=exmailInboxCount(body);
+        if(n>=0) return n;
+        if(body==null||body.isEmpty()) return -1;
+        Matcher m=Pattern.compile("\"(?:mailnum|mailcount|mailNum|mailCount|total)\"\\s*:\\s*(\\d+)").matcher(body);
+        if(m.find()){
+            try { return Integer.parseInt(m.group(1)); } catch(NumberFormatException ignored) {}
+        }
+        m=Pattern.compile("(?:mailnum|mailcount)\\s*:\\s*(\\d+)").matcher(body);
+        if(m.find()){
+            try { return Integer.parseInt(m.group(1)); } catch(NumberFormatException ignored) {}
+        }
+        return -1;
+    }
+    /** Tencent readmail CGI when sid/cookie expired. Not a letter. */
+    public static boolean looksLikeMailSessionDead(String body) {
+        if(body==null||body.isEmpty()) return false;
+        String t=unwrapCgi(body);
+        String low=t.toLowerCase(Locale.ROOT);
+        if(low.contains("session_timeout")) return true;
+        if(low.contains("cgi exception") || low.contains("\"title\":\"cgi exception\"") || low.contains("title : \"cgi exception\"") || low.contains("title:\"cgi exception\""))
+            return true;
+        if(low.contains("loginpage") && (low.contains("errcode")||low.contains("errmsg"))) return true;
+        if(low.contains("errcode") && (low.contains("\"-2\"")||low.contains(": -2")||low.contains(":-2"))) {
+            if(low.contains("readmail")||low.contains("appname")) return true;
+        }
+        return false;
+    }
+    public static String mailJsonContent(String body) {
+        if(body==null||body.isEmpty()) return "";
+        String t=unwrapCgi(body);
+        // Nested cgiData / data.content first (Tencent read.json).
+        Matcher nested=Pattern.compile("(?:cgiData|data)\\s*[:=]\\s*\\{([\\s\\S]{20,80000}?)\\}\\s*(?:,|;)").matcher(t);
+        while(nested.find()){
+            String inner=mailJsonContent("{"+nested.group(1)+"}");
+            if(!inner.isEmpty()) return inner;
+        }
+        Matcher m=Pattern.compile("['\"]?(?:content|html|mailcontent|body|mailbody|contentHtml|bodyhtml|htmlbody|contentText|mailcontenthtml|bodyText|text)['\"]?\\s*:\\s*\"((?:\\\\.|[^\"\\\\])*)\"").matcher(t);
+        while(m.find()){
+            String raw=m.group(1);
+            String v=entities(unescapeJson(raw)).trim();
+            // Some responses ship base64 HTML in content.
+            if(v.length()>40 && v.matches("(?i)^[A-Za-z0-9+/=\\r\\n]+$") && v.length()%4==0){
+                try {
+                    byte[] dec=java.util.Base64.getDecoder().decode(v.replaceAll("\\s",""));
+                    String decoded=new String(dec, java.nio.charset.StandardCharsets.UTF_8);
+                    if(text(decoded).length()>=2) return decoded;
+                } catch(Throwable ignored) {}
+            }
+            String plain=text(v);
+            if(plain.length()>=2 && !looksLikeMailSessionDead(v)) return v;
+        }
+        m=Pattern.compile("(?:content|html|mailcontent)\\s*:\\s*'((?:\\\\.|[^'\\\\])*)'").matcher(t);
+        if(m.find()){
+            String v=entities(unescapeJson(m.group(1))).trim();
+            if(text(v).length()>=2 && !looksLikeMailSessionDead(v)) return v;
+        }
+        return "";
+    }
+    public static String mailIframeSrc(String html) {
+        if(html==null||html.isEmpty()) return "";
+        Matcher m=Pattern.compile("(?is)<iframe\\b([^>]*)>").matcher(html);
+        while(m.find()){
+            String attrs=m.group(1);
+            String src=attr(attrs,"src");
+            if(src.isEmpty()||src.startsWith("javascript:")||src.startsWith("about:")) continue;
+            String id=attr(attrs,"id").toLowerCase(Locale.ROOT);
+            String name=attr(attrs,"name").toLowerCase(Locale.ROOT);
+            String cls=attr(attrs,"class").toLowerCase(Locale.ROOT);
+            String low=src.toLowerCase(Locale.ROOT);
+            if(id.contains("content")||id.contains("mail")||name.contains("content")||name.contains("mail")
+                    ||cls.contains("content")||cls.contains("mail")
+                    ||low.contains("read")||low.contains("mail")||low.contains("content")||low.contains("cgi-bin"))
+                return src;
+        }
+        return "";
+    }
+    public static String mailBodyHtml(String body) {
+        if(body==null||body.isEmpty()) return "";
+        if(looksLikeMailSessionDead(body)) return "";
+        String json=mailJsonContent(body);
+        if(!json.isEmpty()) return json;
+        Matcher m=Pattern.compile("(?is)<(?:div|table|td)\\b[^>]*(?:id|class)=['\"][^'\"]*(?:mailContentContainer|contentDiv|mailcontent|mail-content|mail_content|contentcontainer|bodycontent|readmail_content)[^'\"]*['\"][^>]*>([\\s\\S]{8,}?)</(?:div|table|td)>").matcher(body);
+        if(m.find()){
+            String inner=m.group(1);
+            if(text(inner).length()>=2 && mailIframeSrc(inner).isEmpty()) return inner;
+        }
+        m=Pattern.compile("(?is)<(?:div|table)\\b[^>]*(?:id|class)=['\"][^'\"]*(?:content|mailcontent|mail-content|body)[^'\"]*['\"][^>]*>([\\s\\S]{20,})</(?:div|table)>").matcher(body);
+        if(m.find()){
+            String inner=m.group(1);
+            if(text(inner).length()>=2 && mailIframeSrc(inner).isEmpty()) return inner;
+        }
+        // Whole-page chrome (读信外壳 / iframe 正文) is not the letter.
+        if(mailIframeSrc(body).length()>0) return "";
+        String low=body.toLowerCase(Locale.ROOT);
+        if(low.contains("<html") && (body.contains("读信")||low.contains("readmail")||low.contains("folderid")||low.contains("mail_list")))
+            return "";
+        m=Pattern.compile("(?is)<body[^>]*>([\\s\\S]+)</body>").matcher(body);
+        if(m.find()){
+            String inner=m.group(1);
+            if(text(inner).length()>=2 && mailIframeSrc(inner).isEmpty() && !inner.contains("读信")) return inner;
+        }
+        if(low.contains("<html")||low.contains("<iframe")) return "";
+        return text(body).length()>=2?body:"";
     }
 }

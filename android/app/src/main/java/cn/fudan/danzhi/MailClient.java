@@ -26,6 +26,8 @@ final class MailClient {
     static final String FUDAN_LOGINPAGE="https://mail.m.fudan.edu.cn/cgi-bin/loginpage";
     static final String IMAP_HOST="imap.exmail.qq.com";
     static final String DEFAULT_MODULUS="CF87D7B4C864F4842F1D337491A48FFF54B73A17300E8E42FA365420393AC0346AE55D8AFAD975DFA175FAF0106CBA81AF1DDE4ACEC284DAC6ED9A0D8FEB1CC070733C58213EFFED46529C54CEA06D774E3CC7E073346AEBD6C66FC973F299EB74738E400B22B1E7CDC54E71AED059D228DFEB5B29C530FF341502AE56DDCFE9";
+    static final int MAIL_CAP=200;
+    static final int MAIL_PAGESIZE=100;
 
     /** Optional WebView hook set by MainActivity. Runs on a background thread. */
     interface BrowserHook { JSONArray loginAndList(FudanClient client, String email, String password) throws Exception; }
@@ -377,7 +379,7 @@ final class MailClient {
             JSONArray out=new JSONArray();int count=folder.getMessageCount();if(count==0)return out;
             if(!(folder instanceof UIDFolder))throw new WebFlow.FlowException("MAIL_UID_UNAVAILABLE","服务器未提供稳定邮件 UID，未用可变化的序号替代");
             UIDFolder uid=(UIDFolder)folder;long validity=uid.getUIDValidity();
-            Message[] messages=folder.getMessages(Math.max(1,count-40),count);
+            Message[] messages=folder.getMessages(Math.max(1,count-MAIL_CAP),count);
             FetchProfile fp=new FetchProfile();fp.add(FetchProfile.Item.ENVELOPE);fp.add(FetchProfile.Item.FLAGS);fp.add(UIDFolder.FetchProfileItem.UID);folder.fetch(messages,fp);
             SimpleDateFormat iso=new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSSXXX",Locale.US);iso.setTimeZone(TimeZone.getTimeZone("Asia/Shanghai"));
             for(int i=messages.length-1;i>=0;i--){
@@ -425,57 +427,90 @@ final class MailClient {
     private static JSONArray listBySidInner(FudanClient client, CookieJar jar, String sid, String landBody, int folder) throws Exception {
         String enc=WebFlow.encode(sid);
         String ref="https://exmail.qq.com/cgi-bin/frame_html?sid="+enc;
-        String[] urls={
-            "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list",
-            "https://mail.m.fudan.edu.cn/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list",
-            "https://exmail.qq.com/cgi-bin/mail_list?sid="+sid+"&folderid="+folder+"&page=0&s=list",
-            "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&t=mail_list.htm",
-            "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&t=mail_list.json",
-            "https://mail.m.fudan.edu.cn/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&t=mail_list.json",
-            "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&ef=js&t=mail_list.json",
-            "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&t=mail_list.xml",
-            "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&topmails=1",
-            "https://exmail.qq.com/cgi-bin/today?sid="+enc+"&t=today.json",
-            "https://exmail.qq.com/cgi-bin/today?sid="+enc,
-            "https://mail.m.fudan.edu.cn/cgi-bin/today?sid="+enc,
-            "https://w.mail.qq.com/cgi-bin/today?sid="+enc
+        String[] jsonUrls={
+            "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&pagesize="+MAIL_PAGESIZE+"&ef=js&t=mail_list.json",
+            "https://mail.m.fudan.edu.cn/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&pagesize="+MAIL_PAGESIZE+"&ef=js&t=mail_list.json",
+            "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&pagesize="+MAIL_PAGESIZE+"&t=mail_list.json",
+            "https://mail.m.fudan.edu.cn/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&pagesize="+MAIL_PAGESIZE+"&t=mail_list.json"
         };
         JSONArray out=new JSONArray();
-        boolean confirmed=false;
-        String form="sid="+enc+"&folderid="+folder+"&page=0&s=list";
-        for(String url:urls){
+        String listedUrl="";
+        String listedBody="";
+        for(String url:jsonUrls){
             Http.Resp r=Http.fetch(jar,url,"GET",null,null,15000, ref);
             r=followHttp(jar,r,4,ref);
-            if(r.code>=200&&r.code<400){
-                if(PageParser.hasValuedMailid(r.body) || PageParser.exmailInboxCount(r.body)==0)
-                    confirmed=PageParser.looksLikeMailList(r.body);
-                collectWebMails(r.body,out);
-                if(out.length()>0){
-                    client.mailListConfirmed=true;
-                    if(folder==4) markTrashed(out);
-                    return out;
-                }
+            if(r.code<200||r.code>=400) continue;
+            collectWebMails(r.body,out);
+            if(out.length()>0){
+                listedUrl=url;
+                listedBody=r.body;
+                break;
             }
             try {
                 Http.Resp p=Http.fetch(jar,url.contains("?")?url.substring(0,url.indexOf('?')):url,
-                    "POST","application/x-www-form-urlencoded",form,15000,url);
+                    "POST","application/x-www-form-urlencoded",
+                    "sid="+enc+"&folderid="+folder+"&page=0&s=list&pagesize="+MAIL_PAGESIZE,15000,url);
                 p=followHttp(jar,p,3,url);
                 if(p.code>=200&&p.code<400){
-                    if(PageParser.hasValuedMailid(p.body) || PageParser.exmailInboxCount(p.body)==0)
-                        confirmed=PageParser.looksLikeMailList(p.body);
                     collectWebMails(p.body,out);
-                    if(out.length()>0){
-                        client.mailListConfirmed=true;
-                        if(folder==4) markTrashed(out);
-                        return out;
-                    }
+                    if(out.length()>0){ listedUrl=url; listedBody=p.body; break; }
                 }
             } catch(Exception ignored) {}
         }
+        if(out.length()==0){
+            String[] htmlUrls={
+                "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&pagesize="+MAIL_PAGESIZE,
+                "https://mail.m.fudan.edu.cn/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list&pagesize="+MAIL_PAGESIZE,
+                "https://exmail.qq.com/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list",
+                "https://mail.m.fudan.edu.cn/cgi-bin/mail_list?sid="+enc+"&folderid="+folder+"&page=0&s=list"
+            };
+            for(String url:htmlUrls){
+                Http.Resp r=Http.fetch(jar,url,"GET",null,null,15000, ref);
+                r=followHttp(jar,r,4,ref);
+                if(r.code<200||r.code>=400) continue;
+                collectWebMails(r.body,out);
+                if(out.length()>0){ listedUrl=url; listedBody=r.body; break; }
+            }
+        }
+        if(out.length()>0 && listedUrl.contains("mail_list")){
+            int total=PageParser.mailListTotal(listedBody);
+            int page=1;
+            while(out.length()<MAIL_CAP && page<6 && (total<0 || out.length()<total)){
+                String next=listedUrl.replaceAll("page=\\d+","page="+page);
+                if(!next.contains("page=")) next += (next.contains("?")?"&":"?")+"page="+page;
+                int before=out.length();
+                try {
+                    Http.Resp r=Http.fetch(jar,next,"GET",null,null,15000, ref);
+                    r=followHttp(jar,r,3,ref);
+                    if(r.code>=200&&r.code<400) collectWebMails(r.body,out);
+                } catch(Exception ignored) {}
+                if(out.length()==before) break;
+                page++;
+            }
+            client.mailListConfirmed=true;
+            if(folder==4) markTrashed(out);
+            return out;
+        }
         if(folder==1) collectWebMails(landBody,out);
-        if(PageParser.hasValuedMailid(landBody) || PageParser.exmailInboxCount(landBody)==0)
-            confirmed = confirmed || PageParser.looksLikeMailList(landBody);
-        client.mailListConfirmed = client.mailListConfirmed || out.length()>0 || (confirmed && PageParser.exmailInboxCount(landBody)==0);
+        if(out.length()==0){
+            String[] digest={
+                "https://exmail.qq.com/cgi-bin/today?sid="+enc+"&t=today.json",
+                "https://exmail.qq.com/cgi-bin/today?sid="+enc,
+                "https://mail.m.fudan.edu.cn/cgi-bin/today?sid="+enc
+            };
+            for(String url:digest){
+                try {
+                    Http.Resp r=Http.fetch(jar,url,"GET",null,null,12000, ref);
+                    r=followHttp(jar,r,3,ref);
+                    collectWebMails(r.body,out);
+                    if(out.length()>0) break;
+                } catch(Exception ignored) {}
+            }
+        }
+        boolean confirmed=PageParser.looksLikeMailList(listedBody) || PageParser.looksLikeMailList(landBody)
+                || PageParser.hasValuedMailid(listedBody) || PageParser.hasValuedMailid(landBody)
+                || PageParser.exmailInboxCount(listedBody==null||listedBody.isEmpty()?landBody:listedBody)==0;
+        client.mailListConfirmed = client.mailListConfirmed || out.length()>0 || confirmed;
         if(folder==4) markTrashed(out);
         return out;
     }
@@ -545,33 +580,80 @@ final class MailClient {
     }
 
     static JSONObject read(FudanClient client, JSONObject item) throws Exception {
+        return read(client, item, true);
+    }
+
+    private static JSONObject read(FudanClient client, JSONObject item, boolean allowRelogin) throws Exception {
         String id=item.optString("id");
         String mailid=item.optString("mailid", item.optString("id"));
         if(mailid.startsWith("mail-web-")) mailid=mailid.substring("mail-web-".length());
         String sid=client.mailSid;
         boolean webId=id.startsWith("mail-web-") || (item.has("mailid") && !item.optString("mailid").isEmpty());
+        boolean sessionDead=false;
         if(sid!=null && !sid.isEmpty() && !mailid.isEmpty() && webId){
+            String encSid=WebFlow.encode(sid);
+            String encId=WebFlow.encode(mailid);
+            // Warm list frame so sid cookie stays bound before read.json.
+            try {
+                Http.follow(client.jar,
+                    "https://mail.m.fudan.edu.cn/cgi-bin/frame_html?sid="+encSid+"&t=frame_html", false);
+            } catch(Exception ignored) {}
             String[] urls={
-                "https://exmail.qq.com/cgi-bin/readmail?sid="+WebFlow.encode(sid)+"&mailid="+WebFlow.encode(mailid)+"&folderid=1&mode=html&t=read.html",
-                "https://mail.m.fudan.edu.cn/cgi-bin/readmail?sid="+WebFlow.encode(sid)+"&mailid="+WebFlow.encode(mailid)+"&folderid=1&t=read.html"
+                "https://mail.m.fudan.edu.cn/cgi-bin/readmail?sid="+encSid+"&mailid="+encId+"&folderid=1&t=read.json&ef=js",
+                "https://exmail.qq.com/cgi-bin/readmail?sid="+encSid+"&mailid="+encId+"&folderid=1&t=read.json&ef=js",
+                "https://mail.m.fudan.edu.cn/cgi-bin/readmail?sid="+encSid+"&mailid="+encId+"&folderid=1&t=read.html",
+                "https://exmail.qq.com/cgi-bin/readmail?sid="+encSid+"&mailid="+encId+"&folderid=1&mode=html&t=read.html",
+                "https://exmail.qq.com/cgi-bin/readmail?sid="+encSid+"&mailid="+encId+"&folderid=1&t=read.html",
+                "https://mail.m.fudan.edu.cn/cgi-bin/readmail?sid="+encSid+"&mailid="+encId+"&t=readmail.html",
+                "https://exmail.qq.com/cgi-bin/readmail?sid="+encSid+"&mailid="+encId+"&t=readmail.html",
+                "https://mail.m.fudan.edu.cn/cgi-bin/readmail?sid="+encSid+"&mailid="+encId+"&folderid=1&t=read.txt"
             };
             for(String url:urls){
                 try {
                     Http.Resp r=Http.follow(client.jar,url,false);
                     if(r.code<200||r.code>=400)continue;
-                    if(WebFlow.loginPage(r.flow()))continue;
+                    if(WebFlow.loginPage(r.flow()) || PageParser.looksLikeMailSessionDead(r.body)){
+                        sessionDead=true;
+                        continue;
+                    }
                     String html=extractMailHtml(r.body);
-                    if(html.length()<8) continue;
+                    if(PageParser.looksLikeMailSessionDead(html)) { sessionDead=true; continue; }
+                    String iframe=PageParser.mailIframeSrc(r.body);
+                    if(!iframe.isEmpty()){
+                        try {
+                            String next=WebFlow.resolve(r.url, iframe);
+                            if(WebFlow.mailHost(WebFlow.host(next)) || WebFlow.campusHost(WebFlow.host(next))){
+                                Http.Resp fr=Http.follow(client.jar, next, false);
+                                if(PageParser.looksLikeMailSessionDead(fr.body)){ sessionDead=true; }
+                                else {
+                                    String inner=extractMailHtml(fr.body);
+                                    if(hasMailText(inner)) html=inner;
+                                }
+                            }
+                        } catch(Exception ignored) {}
+                    }
+                    if(!hasMailText(html)) continue;
                     item.put("unread", false);
+                    String title=item.optString("title");
+                    String jsonTitle=jsField(PageParser.unwrapCgi(r.body),"subject","title","tt","t");
+                    if(jsonTitle.equalsIgnoreCase("cgi exception")) jsonTitle="";
+                    if(!jsonTitle.isEmpty() && (title.isEmpty()||"（无主题）".equals(title)||!jsonTitle.equals(title)))
+                        title=jsonTitle;
                     return new JSONObject().put("status","ok").put("id",id)
-                        .put("title",item.optString("title"))
+                        .put("title",title)
                         .put("html",html).put("url",item.optString("url",EXMAIL));
                 } catch(Exception ignored) {}
+            }
+            if(sessionDead && allowRelogin){
+                client.mailSid="";
+                try { fetch(client, client.username, client.mailPassword); } catch(Exception ignored) {}
+                if(client.mailSid!=null && !client.mailSid.isEmpty())
+                    return read(client, item, false);
             }
         }
         if(id.startsWith("mail-") && !id.startsWith("mail-web-")){
             String body=readImapBody(client, item);
-            if(body!=null){
+            if(body!=null && hasMailText(body)){
                 item.put("unread", false);
                 return new JSONObject().put("status","ok").put("id",id)
                     .put("title",item.optString("title")).put("html",body)
@@ -579,10 +661,26 @@ final class MailClient {
             }
         }
         String summary=item.optString("summary");
+        String title=item.optString("title");
+        // Never surface raw cgi exception blobs; keep a short, mail-only fallback.
+        String bodyText=summary.isEmpty()?title:summary;
+        if(PageParser.looksLikeMailSessionDead(bodyText)) bodyText=title.isEmpty()?"（无主题）":title;
+        String fallback="<p>"+esc(bodyText)+"</p><p>未能拉取正文，可稍后重试或点「原平台」打开。</p>";
         return new JSONObject().put("status","ok").put("id",id)
-            .put("title",item.optString("title"))
-            .put("html","<p>"+esc(summary)+"</p><p>未能拉取正文，可稍后重试。</p>")
+            .put("title",title)
+            .put("html",fallback)
+            .put("source","mail")
             .put("url",item.optString("url",EXMAIL));
+    }
+
+    private static boolean hasMailText(String html) {
+        if(html==null) return false;
+        if(PageParser.looksLikeMailSessionDead(html)) return false;
+        String t=PageParser.text(html);
+        if(t.length()<2) return false;
+        if(t.contains("cgi exception")||t.contains("session_timeout")) return false;
+        String stripped=t.replaceAll("读信|回复|转发|收件人|发件人|主题|收件箱|新窗口|腾讯企业邮箱","").trim();
+        return stripped.length()>=2;
     }
 
     static JSONObject trash(FudanClient client, JSONArray items) throws Exception {
@@ -717,11 +815,7 @@ final class MailClient {
 
     static String extractMailHtml(String body) {
         if(body==null) return "";
-        Matcher m=Pattern.compile("(?is)<(?:div|table)\\b[^>]*(?:id|class)=['\"][^'\"]*(?:content|mailcontent|mail-content|body)[^'\"]*['\"][^>]*>([\\s\\S]{20,})</(?:div|table)>").matcher(body);
-        if(m.find()) return sanitize(m.group(1));
-        m=Pattern.compile("(?is)<body[^>]*>([\\s\\S]+)</body>").matcher(body);
-        if(m.find()) return sanitize(m.group(1));
-        return sanitize(body);
+        return sanitize(PageParser.mailBodyHtml(body));
     }
 
     private static String encodeForm(Map<String,String> fields) {
@@ -749,7 +843,7 @@ final class MailClient {
             if(from.isEmpty()) from=m.fromAddr==null?"":m.fromAddr;
             else if(m.fromAddr!=null && !m.fromAddr.isEmpty() && !from.contains(m.fromAddr))
                 from=from+" <"+m.fromAddr+">";
-            putMail(out, m.title, from, m.mailid, m.totime, m.unread);
+            putMail(out, m.title, from, m.mailid, m.totime, m.unread, "");
         }
         if(out.length()>0)return;
         String t=PageParser.unwrapCgi(body);
@@ -789,7 +883,7 @@ final class MailClient {
             if(out.length()>0)return;
         }
         Matcher xml=Pattern.compile("(?is)<mail\\b[^>]*>(.*?)</mail>").matcher(body);
-        while(xml.find()&&out.length()<40){
+        while(xml.find()&&out.length()<MAIL_CAP){
             String block=xml.group(1);
             String title=xmlTag(block,"subject");
             if(title.length()<1) title=xmlTag(block,"subj");
@@ -805,7 +899,7 @@ final class MailClient {
         }
         if(out.length()>0)return;
         Matcher row=Pattern.compile("(?is)<tr\\b[^>]*>(.*?)</tr>").matcher(body);
-        while(row.find()&&out.length()<40){
+        while(row.find()&&out.length()<MAIL_CAP){
             String html=row.group(1);
             if(!html.toLowerCase(Locale.ROOT).contains("subject") && !html.contains("mailid") && !html.contains("onclick")) continue;
             String title=firstText(html, new String[]{"subject","black","tt"});
@@ -824,13 +918,15 @@ final class MailClient {
     static void collectJsMails(String body, JSONArray out) {
         if(body==null||body.isEmpty())return;
         Matcher rec=Pattern.compile("\\{([^{}]{8,1600})\\}").matcher(body);
-        while(rec.find()&&out.length()<40){
+        while(rec.find()&&out.length()<MAIL_CAP){
             String block=rec.group(1);
-            String title=jsField(block,"tt","subject","title","subj","t");
+            String title=jsField(block,"tt","subject","title","subj");
+            if(title.length()<1) title=jsField(block,"t");
             if(title.length()<1) continue;
             String mailid=jsField(block,"mailid","id","mid");
             String from=jsField(block,"dr","from","sender","fa","fn","f","fr");
-            if(mailid.isEmpty() && from.isEmpty() && !block.contains("ifnew") && !block.contains("idate") && !block.contains("abs"))
+            String abs=jsField(block,"abs","snippet","abstract","summary");
+            if(mailid.isEmpty() && from.isEmpty() && abs.isEmpty() && !block.contains("ifnew") && !block.contains("idate") && !block.contains("abs"))
                 continue;
             long when=Filter.parseTime(jsField(block,"idate","date","time","d"));
             if(when==0){
@@ -840,17 +936,31 @@ final class MailClient {
             }
             boolean unread=block.contains("ifnew:1")||block.contains("\"ifnew\":1")||block.contains("unread")
                     ||"1".equals(jsField(block,"new","ifnew"));
-            putMail(out, title, from, mailid, when, unread);
+            putMail(out, title, from, mailid, when, unread, abs);
         }
     }
 
     private static void putMail(JSONArray out, String title, String from, String mailid, long when, boolean unread) {
+        putMail(out, title, from, mailid, when, unread, "");
+    }
+
+    private static void putMail(JSONArray out, String title, String from, String mailid, long when, boolean unread, String snippet) {
         try {
+            if(out.length()>=MAIL_CAP) return;
+            if(mailid!=null && !mailid.isEmpty()){
+                for(int i=0;i<out.length();i++){
+                    JSONObject exist=out.optJSONObject(i);
+                    if(exist!=null && mailid.equals(exist.optString("mailid"))) return;
+                }
+            }
             String id=mailid==null||mailid.isEmpty()?String.valueOf(Math.abs((title+when).hashCode())):mailid;
             String url=mailUrl(mailid);
+            String summary=snippet!=null?snippet.trim():"";
+            if(summary.isEmpty() || summary.equals(title))
+                summary=from==null||from.isEmpty()?"学生云邮箱":from;
             JSONObject o=new JSONObject().put("id","mail-web-"+id)
                 .put("source","mail").put("kind","mail").put("title",title)
-                .put("summary",from==null||from.isEmpty()?"学生云邮箱":from).put("from",from==null?"":from)
+                .put("summary",summary).put("from",from==null?"":from)
                 .put("url",url).put("unread",unread).put("mailid",mailid==null?"":mailid);
             if(when>0){o.put("receivedAt",when);o.put("publishedAt",iso(when));}
             out.put(o);
@@ -881,7 +991,7 @@ final class MailClient {
     }
 
     private static void collectColumnMails(Object node, JSONArray out) {
-        if(node==null||out.length()>=40)return;
+        if(node==null||out.length()>=MAIL_CAP)return;
         if(node instanceof JSONArray){
             JSONArray a=(JSONArray)node;
             for(int i=0;i<a.length();i++) collectColumnMails(a.opt(i),out);
@@ -902,7 +1012,7 @@ final class MailClient {
         if(news==null) news=rec.optJSONArray("new");
         if(titles!=null && titles.length()>0){
             int n=titles.length();
-            for(int i=0;i<n && out.length()<40;i++){
+            for(int i=0;i<n && out.length()<MAIL_CAP;i++){
                 String title=titles.optString(i,"").trim();
                 if(title.isEmpty()||"null".equals(title)) continue;
                 String mailid=ids==null?"":ids.optString(i,"");
@@ -931,7 +1041,7 @@ final class MailClient {
     }
 
     private static void walkMailJson(Object node, JSONArray out, int depth) {
-        if(node==null||depth>8||out.length()>=40)return;
+        if(node==null||depth>8||out.length()>=MAIL_CAP)return;
         if(node instanceof JSONArray){
             JSONArray a=(JSONArray)node;
             for(int i=0;i<a.length();i++) walkMailJson(a.opt(i),out,depth+1);

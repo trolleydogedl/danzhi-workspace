@@ -37,6 +37,8 @@ final class SessionCoordinator {
                         if(items!=null) fresh.lastItems=items;
                         org.json.JSONArray trash=poll.optJSONArray("trash");
                         if(trash!=null) fresh.lastTrash=trash;
+                        org.json.JSONArray courses=poll.optJSONArray("courses");
+                        if(courses!=null) fresh.lastCourses=courses;
                     } catch(Exception ignored) {}
                 }
                 try {
@@ -69,13 +71,8 @@ final class SessionCoordinator {
             }
             JSONObject result=action.run(snap);
             synchronized(CLIENT_LOCK){
-                try {
-                    org.json.JSONArray a=new org.json.JSONArray(live.jar.dump());
-                    org.json.JSONArray b=new org.json.JSONArray(snap.jar.dump());
-                    for(int i=0;i<b.length();i++) a.put(b.opt(i));
-                    live.jar.load(a.toString());
-                    live.jar.viaVpn=snap.jar.viaVpn;
-                } catch(Exception ignored) {}
+                live.jar.load(snap.jar.dump());
+                live.jar.viaVpn=snap.jar.viaVpn;
             }
             return result;
         } catch(Exception e){
@@ -95,7 +92,7 @@ final class SessionCoordinator {
     }
     static void clear(Context context,FudanClient client) {
         client.jar.clear();client.mfa.clear();client.username="";client.password="";client.mailPassword="";client.mailAuthBlocked=false;
-        client.mailSid="";client.mailListConfirmed=false;client.lastItems=new org.json.JSONArray();client.lastTrash=new org.json.JSONArray();client.hiddenIds.clear();
+        client.mailSid="";client.mailListConfirmed=false;client.lastItems=new org.json.JSONArray();client.lastTrash=new org.json.JSONArray();client.lastCourses=new org.json.JSONArray();client.hiddenIds.clear();
         new CredentialStore(context).clear();context.getSharedPreferences("danzhi",Context.MODE_PRIVATE).edit().clear().apply();
     }
 }

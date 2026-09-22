@@ -61,10 +61,17 @@ public class KeepAliveService extends Service {
     private void startLoop() {
         if (loop != null && loop.isAlive()) return;
         loop = new Thread(() -> {
+            boolean first = true;
             while (running && !Thread.currentThread().isInterrupted()) {
                 SharedPreferences sp = getSharedPreferences("danzhi", MODE_PRIVATE);
                 long period = Math.max(15, sp.getInt("intervalMin", 15)) * 60_000L;
-                try { Thread.sleep(period); }
+                long last = sp.getLong("lastBackgroundPollAt", 0L);
+                long wait;
+                if (first) wait = 20_000L;
+                else if (last > 0) wait = Math.max(5_000L, period - Math.max(0, System.currentTimeMillis() - last));
+                else wait = period;
+                first = false;
+                try { Thread.sleep(wait); }
                 catch (InterruptedException e) { return; }
                 if (!running) return;
                 if (!sp.getBoolean("backgroundEnabled", false) || !sp.getBoolean("hasSession", false)) {
@@ -87,15 +94,19 @@ public class KeepAliveService extends Service {
                     SessionCoordinator.save(this, client, true);
                     return result;
                 });
+                long now = System.currentTimeMillis();
                 if ("error".equals(r.optString("status"))) {
                     int n = sp.getInt("backgroundFailures", 0) + 1;
-                    sp.edit().putInt("backgroundFailures", n).putString("backgroundError", r.optString("message")).apply();
+                    sp.edit().putInt("backgroundFailures", n).putString("backgroundError", r.optString("message"))
+                            .putLong("lastBackgroundPollAt", now).apply();
                 } else {
-                    sp.edit().putInt("backgroundFailures", 0).remove("backgroundError").putString("lastPoll", r.toString()).apply();
+                    sp.edit().putInt("backgroundFailures", 0).remove("backgroundError").putString("lastPoll", r.toString())
+                            .putLong("lastBackgroundPollAt", now).apply();
                     notifyFresh(this, sp, r);
                 }
             } catch (Exception | LinkageError e) {
-                sp.edit().putString("backgroundError", Diagnostics.message(e)).apply();
+                sp.edit().putString("backgroundError", Diagnostics.message(e))
+                        .putLong("lastBackgroundPollAt", System.currentTimeMillis()).apply();
             } finally {
                 AlarmReceiver.schedule(this);
             }

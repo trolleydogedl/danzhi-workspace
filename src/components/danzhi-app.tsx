@@ -9,6 +9,7 @@ import {
   IconEyeOff,
   IconInbox,
   IconLogout,
+  IconNote,
   IconQr,
   IconRefresh,
   IconSettings,
@@ -34,8 +35,8 @@ const SOURCE_ZH: Record<string, string> = {
   timetable: "课表",
 };
 const LOGIN_TIMEOUT_MS = 28000;
-const APK = "/danzhi-1.25.0.apk";
-const APK_NAME = "danzhi-1.25.0.apk";
+const APK = "/danzhi-1.29.0.apk";
+const APK_NAME = "danzhi-1.29.0.apk";
 
 function dueSoon(dueAt?: string): boolean {
   if (!dueAt) return false;
@@ -187,6 +188,7 @@ const TABS: { id: TabId; label: string; Icon: typeof IconInbox }[] = [
   { id: "table", label: "课表", Icon: IconTable },
   { id: "pass", label: "校园码", Icon: IconQr },
   { id: "rooms", label: "教室", Icon: IconDoor },
+  { id: "notes", label: "笔记", Icon: IconNote },
   { id: "settings", label: "设置", Icon: IconSettings },
 ];
 
@@ -569,7 +571,7 @@ export function DanzhiApp() {
           className="mt-3 inline-flex items-center gap-1.5 text-sm text-muted underline-offset-4 hover:underline"
         >
           <IconDownload className="size-4" />
-          下载 Android 安装包 1.25.0
+          下载 Android 安装包 1.29.0
         </a>
       </main>
     );
@@ -691,12 +693,13 @@ export function DanzhiApp() {
         <section className="mx-auto max-w-lg px-5 pb-28 pt-8">
           <p className="text-xs font-medium tracking-[0.22em] text-subtle">空教室</p>
           <h1 className="mt-1 text-3xl font-bold">哪间空着</h1>
+          <p className="mt-2 text-xs text-subtle">每格是一节课。描边的是当前这节，所有教室同一列。</p>
           <div className="mt-4 flex flex-col gap-2">
             {[
               { name: "H2101", seats: "60", busy: [true, true, false, false, false, true, false, false, false, false, false, false, false] },
               { name: "H2105", seats: "48", busy: [false, false, true, true, false, false, false, false, true, true, false, false, false] },
               { name: "H3105", seats: "90", busy: [true, true, true, true, false, false, false, false, false, false, false, false, false] },
-            ].map((room) => {
+            ].map((room, idx) => {
               const now = new Date();
               const mins = now.getHours() * 60 + now.getMinutes();
               const cur = PERIODS.find((p) => {
@@ -708,6 +711,21 @@ export function DanzhiApp() {
               const freeNow = curN ? !room.busy[curN - 1] : true;
               return (
                 <article key={room.name} className="card-shadow rounded-2xl bg-elev p-4">
+                  {idx === 0 ? (
+                    <div className="mb-2 flex gap-0.5">
+                      {PERIODS.map((p) => (
+                        <span
+                          key={p.n}
+                          className={cn(
+                            "flex-1 text-center text-[9px] font-bold",
+                            p.n === curN ? "text-fg" : "text-subtle",
+                          )}
+                        >
+                          {p.n}
+                        </span>
+                      ))}
+                    </div>
+                  ) : null}
                   <div className="flex items-center justify-between">
                     <strong>{room.name}</strong>
                     <span className={cn("rounded-full px-2 py-0.5 text-xs", freeNow ? "bg-ok/20 text-ok" : "bg-busy/20 text-busy")}>
@@ -742,13 +760,15 @@ export function DanzhiApp() {
         </section>
       ) : null}
 
+      {tab === "notes" ? <NotesPanel /> : null}
+
       {tab === "settings" ? (
         <section className="mx-auto max-w-lg px-5 pb-28 pt-8">
           <p className="text-xs font-medium tracking-[0.22em] text-subtle">设置</p>
           <h1 className="mt-1 text-3xl font-bold">
             {profile?.name || profile?.studentId || "已登录"}
           </h1>
-          <p className="mt-1 text-xs text-subtle">版本 1.25.0 · 网页看板</p>
+          <p className="mt-1 text-xs text-subtle">版本 1.29.0 · 网页看板</p>
           <div className="card-shadow mt-4 rounded-2xl bg-elev p-4 text-sm">
             {Object.entries(sources).map(([k, v]) => (
               <p key={k} className="my-1 flex justify-between">
@@ -788,7 +808,7 @@ export function DanzhiApp() {
         </section>
       ) : null}
 
-      <nav className="fixed inset-x-3 bottom-[max(10px,env(safe-area-inset-bottom))] grid grid-cols-5 rounded-[28px] border border-border bg-elev/95 p-1.5 shadow-card backdrop-blur">
+      <nav className="fixed inset-x-3 bottom-[max(10px,env(safe-area-inset-bottom))] grid grid-cols-6 rounded-[28px] border border-border bg-elev/95 p-1.5 shadow-card backdrop-blur">
         {TABS.map(({ id, label, Icon }) => (
           <button
             key={id}
@@ -861,5 +881,139 @@ function NextCard({
         {hit.location || ""} {periodRangeLabel(hit.startPeriod, hit.endPeriod)}
       </p>
     </div>
+  );
+}
+
+type Note = {
+  id: string;
+  title: string;
+  body: string;
+  pinned: boolean;
+  attachments: { name: string; mime: string; data: string }[];
+  created: number;
+  updated: number;
+};
+
+function loadWebNotes(): Note[] {
+  try {
+    return JSON.parse(localStorage.getItem("dz_notes") || "[]") as Note[];
+  } catch {
+    return [];
+  }
+}
+
+function NotesPanel() {
+  const [notes, setNotes] = useState<Note[]>(() => loadWebNotes());
+  const [editing, setEditing] = useState<Note | null>(null);
+  const persist = (list: Note[]) => {
+    setNotes(list);
+    try {
+      localStorage.setItem("dz_notes", JSON.stringify(list));
+    } catch {
+      /* ignore quota */
+    }
+  };
+  const sorted = [...notes].sort((a, b) => {
+    if (!!a.pinned !== !!b.pinned) return a.pinned ? -1 : 1;
+    return (b.updated || 0) - (a.updated || 0);
+  });
+  if (editing) {
+    return (
+      <section className="mx-auto max-w-lg px-5 pb-28 pt-8">
+        <p className="text-xs font-medium tracking-[0.22em] text-subtle">笔记</p>
+        <h1 className="mt-1 text-3xl font-bold">{editing.title || "新笔记"}</h1>
+        <input
+          className="mt-4 h-12 w-full rounded-2xl border border-border bg-elev px-4"
+          placeholder="标题"
+          value={editing.title}
+          onChange={(e) => setEditing({ ...editing, title: e.target.value })}
+        />
+        <textarea
+          className="mt-3 min-h-40 w-full rounded-2xl border border-border bg-elev p-3"
+          placeholder="记点什么…"
+          value={editing.body}
+          onChange={(e) => setEditing({ ...editing, body: e.target.value })}
+        />
+        <PressButton
+          className="mt-4"
+          onClick={() => {
+            const draft = {
+              ...editing,
+              title: editing.title.trim() || (editing.body || "未命名").slice(0, 18),
+              updated: Date.now(),
+            };
+            const next = notes.some((n) => n.id === draft.id)
+              ? notes.map((n) => (n.id === draft.id ? draft : n))
+              : [draft, ...notes];
+            persist(next);
+            setEditing(null);
+          }}
+        >
+          保存
+        </PressButton>
+        <button
+          type="button"
+          className="mt-2 flex h-12 w-full items-center justify-center rounded-xl text-sm"
+          onClick={() => setEditing({ ...editing, pinned: !editing.pinned })}
+        >
+          {editing.pinned ? "取消置顶" : "置顶"}
+        </button>
+        <button
+          type="button"
+          className="mt-1 flex h-12 w-full items-center justify-center rounded-xl text-sm text-danger"
+          onClick={() => {
+            persist(notes.filter((n) => n.id !== editing.id));
+            setEditing(null);
+          }}
+        >
+          删除
+        </button>
+        <button
+          type="button"
+          className="mt-1 flex h-12 w-full items-center justify-center rounded-xl text-sm text-muted"
+          onClick={() => setEditing(null)}
+        >
+          返回
+        </button>
+      </section>
+    );
+  }
+  return (
+    <section className="mx-auto max-w-lg px-5 pb-28 pt-8">
+      <p className="text-xs font-medium tracking-[0.22em] text-subtle">笔记</p>
+      <h1 className="mt-1 text-3xl font-bold">随手记</h1>
+      <p className="mt-2 text-sm text-subtle">本地保存。安装包里还可以附照片和文件。</p>
+      <PressButton
+        className="mt-4"
+        onClick={() =>
+          setEditing({
+            id: "n-" + Date.now().toString(36),
+            title: "",
+            body: "",
+            pinned: false,
+            attachments: [],
+            created: Date.now(),
+            updated: Date.now(),
+          })
+        }
+      >
+        写一条
+      </PressButton>
+      <div className="mt-4 flex flex-col gap-2">
+        {sorted.map((n) => (
+          <button
+            key={n.id}
+            type="button"
+            className="card-shadow rounded-2xl bg-elev p-4 text-left"
+            onClick={() => setEditing(n)}
+          >
+            {n.pinned ? <span className="text-xs font-bold text-primary">置顶</span> : null}
+            <strong className="mt-1 block">{n.title || "未命名"}</strong>
+            <p className="mt-1 text-xs text-subtle">{(n.body || "").slice(0, 80)}</p>
+          </button>
+        ))}
+        {!sorted.length ? <p className="text-sm text-subtle">还没有笔记。点「写一条」记下作业或闸机提醒。</p> : null}
+      </div>
+    </section>
   );
 }

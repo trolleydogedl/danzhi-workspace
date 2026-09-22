@@ -143,4 +143,12 @@ public final class TimetableText {
         if(getData.find())return getData.group(1);
         return "";
     }
+    /** Student data id from 树维 landing URL or page, never invented. */
+    public static String studentIdFrom(String url, String html) {
+        String blob=(url==null?"":url)+" "+(html==null?"":html);
+        Matcher m=Pattern.compile("course-table/(?:info|semester-index)/(\\d+)").matcher(blob);
+        if(m.find()) return m.group(1);
+        m=Pattern.compile("(?:[\"']?studentId[\"']?)\\s*[:=]\\s*[\"']?(\\d+)").matcher(html==null?"":html);
+        return m.find()?m.group(1):"";
+    }
 }

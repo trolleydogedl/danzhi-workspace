@@ -35,6 +35,7 @@ final class FudanClient {
     boolean mailListConfirmed = false;
     JSONArray lastItems = new JSONArray();
     JSONArray lastTrash = new JSONArray();
+    JSONArray lastCourses = new JSONArray();
     java.util.LinkedHashSet<String> hiddenIds = new java.util.LinkedHashSet<>();
     final MfaState mfa = new MfaState();
 
@@ -264,6 +265,8 @@ final class FudanClient {
         out.put("mailHost", "mail.m.fudan.edu.cn");
         lastItems = inbox;
         lastTrash = trash;
+        lastCourses = out.optJSONArray("courses");
+        if (lastCourses == null) lastCourses = new JSONArray();
         return out;
     }
 
@@ -279,7 +282,7 @@ final class FudanClient {
             return mail;
         } catch (Exception | LinkageError e) {
             putSrc(sources, "mail", srcQuiet(false, 0, Diagnostics.message(e)));
-            return new JSONArray();
+            return previousBySource("mail");
         }
     }
     private JSONObject takeElearning(JSONObject sources) {
@@ -290,7 +293,10 @@ final class FudanClient {
             return el;
         } catch (Exception | LinkageError e) {
             putSrc(sources, "elearning", srcQuiet(false, 0, Diagnostics.message(e)));
-            return null;
+            JSONObject stale = new JSONObject();
+            try { stale.put("items", previousBySource("elearning")); stale.put("courses", new JSONArray()); }
+            catch (Exception ignored) {}
+            return stale;
         }
     }
     private JSONArray takeEhall(JSONObject sources) {
@@ -300,7 +306,7 @@ final class FudanClient {
             return hall;
         } catch (Exception | LinkageError e) {
             putSrc(sources, "ehall", srcQuiet(false, 0, Diagnostics.message(e)));
-            return new JSONArray();
+            return previousBySource("ehall");
         }
     }
     private JSONArray takeTimetable(JSONObject sources) {
@@ -310,7 +316,7 @@ final class FudanClient {
             return table;
         } catch (Exception | LinkageError e) {
             putSrc(sources, "timetable", srcQuiet(false, 0, Diagnostics.message(e)));
-            return new JSONArray();
+            return lastCourses == null ? new JSONArray() : lastCourses;
         }
     }
     private static void putSrc(JSONObject sources, String key, JSONObject val) {
@@ -350,10 +356,36 @@ final class FudanClient {
     }
 
     private JSONObject fetchElearning() throws Exception {
-        enterService(ELEARNING + "/login/cas");
-        Object profile = getJson(ELEARNING + "/api/v1/users/self");
-        if (!(profile instanceof JSONObject) || !((JSONObject)profile).has("id"))
+        Exception last = null;
+        JSONObject profileObj = null;
+        for (int attempt = 0; attempt < 3 && profileObj == null; attempt++) {
+            try {
+                enterService(ELEARNING + "/login/cas");
+                Object profile = getJson(ELEARNING + "/api/v1/users/self");
+                if (profile instanceof JSONObject && ((JSONObject) profile).has("id"))
+                    profileObj = (JSONObject) profile;
+                else last = new WebFlow.FlowException("AUTH_REQUIRED", "eLearning 用户身份尚未通过验证");
+            } catch (java.io.IOException e) {
+                last = e;
+                try { Thread.sleep(280L * (attempt + 1)); } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw ie;
+                }
+            } catch (Exception e) {
+                last = e;
+                if (e instanceof WebFlow.FlowException && "AUTH_REQUIRED".equals(((WebFlow.FlowException) e).category) && attempt == 2)
+                    throw e;
+                try { Thread.sleep(180L * (attempt + 1)); } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw ie;
+                }
+            }
+        }
+        if (profileObj == null) {
+            if (last instanceof WebFlow.FlowException) throw last;
+            if (last != null) throw last;
             throw new WebFlow.FlowException("AUTH_REQUIRED", "eLearning 用户身份尚未通过验证");
+        }
         JSONArray active = getJsonArrayPages(ELEARNING + "/api/v1/courses?enrollment_state=active&per_page=100", 4);
         JSONArray courses = mergeCourses(
                 active,
@@ -458,7 +490,7 @@ final class FudanClient {
             }
         } catch (Exception ignored) {}
         int assignN = courses.length();
-        ExecutorService asgPool = Executors.newFixedThreadPool(6);
+        ExecutorService asgPool = Executors.newFixedThreadPool(2);
         List<Future<?>> asgJobs = new ArrayList<>();
         for (int i = 0; i < assignN; i++) {
             JSONObject c = courses.optJSONObject(i);
@@ -524,10 +556,20 @@ final class FudanClient {
         String source = it.optString("source");
         if ("mail".equals(source)) return MailClient.read(this, it);
         if ("elearning".equals(source)) return readElearningItem(it);
-        String summary = it.optString("summary", it.optString("title"));
+        String title = it.optString("title");
+        String summary = it.optString("summary", title);
+        if (summary == null || summary.isEmpty() || summary.equals(title)) summary = title;
+        String body = summary == null ? "" : summary.trim();
+        if (body.isEmpty()) body = title;
+        String safe = body
+                .replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+        String html = "<p>" + safe + "</p>";
+        // Prefer plain text block for notices; original page is always available via 原平台.
         return new JSONObject().put("status", "ok").put("id", id)
-                .put("title", it.optString("title"))
-                .put("html", "<p>" + MailClient.sanitize(summary).replace("<", "<") + "</p>")
+                .put("title", title)
+                .put("html", html)
+                .put("source", source)
+                .put("summary", summary)
                 .put("url", it.optString("url"));
     }
 
@@ -666,13 +708,25 @@ final class FudanClient {
         String next = url;
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (int i = 0; i < Math.max(1, maxPages) && next != null && seen.add(next); i++) {
-            Http.Resp r;
-            try {
-                r = Http.fetch(jar, next, "GET", null, null, 10000);
-                if (r.code >= 300 && r.code < 400 && r.location != null && !r.location.isEmpty()) {
-                    r = Http.follow(jar, next, false);
+            Http.Resp r = null;
+            Exception last = null;
+            for (int attempt = 0; attempt < 4 && r == null; attempt++) {
+                try {
+                    r = Http.fetch(jar, next, "GET", null, null, 15000);
+                    if (r.code >= 300 && r.code < 400 && r.location != null && !r.location.isEmpty()) {
+                        r = Http.follow(jar, next, false);
+                    }
+                } catch (java.io.IOException e) {
+                    last = e;
+                    try { Thread.sleep(240L * (attempt + 1)); } catch (InterruptedException ie) {
+                        Thread.currentThread().interrupt();
+                        throw ie;
+                    }
                 }
-            } catch (Exception e) {
+            }
+            if (r == null) {
+                if (all.length() > 0) break;
+                if (last != null) throw last;
                 break;
             }
             if (r.code == 401 || r.code == 403 || WebFlow.loginPage(r.flow()))
@@ -783,6 +837,23 @@ final class FudanClient {
         FeedMerge.Item fi = Filter.asItem(it);
         String key = FeedMerge.key(fi);
         JSONObject old = uniq.get(key);
+        if (old == null) {
+            String urlKey = FeedMerge.assignmentUrlKey(it.optString("url"));
+            for (java.util.Map.Entry<String, JSONObject> e : uniq.entrySet()) {
+                JSONObject cur = e.getValue();
+                if (cur == null) continue;
+                if (!urlKey.isEmpty() && urlKey.equals(FeedMerge.assignmentUrlKey(cur.optString("url")))) {
+                    key = e.getKey();
+                    old = cur;
+                    break;
+                }
+                if (FeedMerge.sameNotice(fi, Filter.asItem(cur))) {
+                    key = e.getKey();
+                    old = cur;
+                    break;
+                }
+            }
+        }
         if (old == null) { uniq.put(key, it); return; }
         FeedMerge.Item oi = Filter.asItem(old);
         JSONObject pick = FeedMerge.better(fi, oi) ? it : old;
@@ -917,25 +988,43 @@ final class FudanClient {
         String table = FDJWGL + "/student/for-std/course-table";
         String sso = FDJWGL + "/student/sso/login?refer=" + enc(table);
         Exception last=null;
-        try { enterPortal(sso); } catch(Exception e){ last=e; }
+        String[] gates = {
+                sso,
+                IDP + "/idp/authCenter/authenticate?service=" + enc(sso),
+                IDP + "/authserver/login?service=" + enc(sso),
+                IDP + "/idp/authCenter/authenticate?service=" + enc(table),
+                IDP + "/authserver/login?service=" + enc(table),
+                table
+        };
+        for (String g : gates) {
+            try { Http.follow(jar, g, false); } catch (Exception e) { last = e; }
+        }
         Http.Resp home=null;
         try {
             home = Http.follow(jar, table, false);
-            if (WebFlow.loginPage(home.flow())) {
-                Http.Resp cas = Http.follow(jar, IDP + "/authserver/login?service=" + enc(table), true);
-                if (cas.url.contains("ticket=") || (cas.location != null && cas.location.contains("ticket="))) {
-                    String loc = cas.url.contains("ticket=")?cas.url:cas.location;
-                    Http.follow(jar, loc, false);
-                }
+            if (WebFlow.loginPage(home.flow()) || home.code == 400 || home.code == 401 || home.code == 403) {
+                try { enterPortal(IDP + "/idp/authCenter/authenticate?service=" + enc(sso)); } catch(Exception e){ last=e; }
+                try { enterPortal(sso); } catch(Exception e){ last=e; }
                 home = Http.follow(jar, table, false);
             }
-            WebFlow.requireHttpSuccess(home.flow());
+            String sid = TimetableText.studentIdFrom(home.url, home.body);
+            if (sid.isEmpty() && home.url != null && home.url.contains("/course-table") && !home.url.contains("/info/")) {
+                Http.Resp hop = Http.follow(jar, table + "/info", false);
+                if (hop != null && hop.code < 400 && !WebFlow.loginPage(hop.flow())) home = hop;
+            }
+            // Some 树维 deployments answer the landing page with 400 but still include semester HTML.
+            if (home.code >= 400 && TimetableText.semesterIdFromHtml(home.body).isEmpty())
+                throw new WebFlow.FlowException("HTTP_ERROR", "课表页 HTTP " + home.code);
+            if (home.code < 400) WebFlow.requireHttpSuccess(home.flow());
         } catch (Exception e) {
             last=e;
             jar.viaVpn = true;
             try { Http.follow(jar, Vpn.LOGIN, false); } catch (Exception ignored) {}
+            try { enterPortal(sso); } catch (Exception ignored) {}
             home = Http.follow(jar, table, false);
-            WebFlow.requireHttpSuccess(home.flow());
+            if (home.code >= 400 && TimetableText.semesterIdFromHtml(home.body).isEmpty())
+                throw new WebFlow.FlowException("HTTP_ERROR", "课表页 HTTP " + home.code);
+            if (home.code < 400) WebFlow.requireHttpSuccess(home.flow());
         }
         try {
             return TimetableAdapter.fetch(jar, home);
@@ -1049,6 +1138,7 @@ final class FudanClient {
             synchronized (sources) { sources.put(source,result); }
         } catch (Exception | LinkageError e) {
             try { synchronized (sources) { sources.put(source,src(false,0,Diagnostics.message(e))); } } catch (Exception ignored) {}
+            concat(items, previousBySource(source));
         }
     }
 
@@ -1074,19 +1164,34 @@ final class FudanClient {
     }
 
     private Object getJson(String url) throws Exception {
-        Http.Resp r = Http.follow(jar, url);
-        WebFlow.requireHttpSuccess(r.flow());
-        if (r.body.trim().startsWith("<")) throw new WebFlow.FlowException("SCHEMA_UNVERIFIED", "接口返回 HTML 而非 JSON");
-        String t = r.body.trim();
-        if (t.startsWith("while(1);")) t = t.substring("while(1);".length()).trim();
-        if (t.startsWith("[")) return new JSONArray(t);
-        if (t.startsWith("{")) {
-            JSONObject o = new JSONObject(t);
-            if (o.optString("status").contains("未经身份") || o.optString("status").contains("unauth")) {
-                throw new Exception("eLearning 会话无效（未经身份验证）");
+        Exception last = null;
+        for (int attempt = 0; attempt < 4; attempt++) {
+            try {
+                Http.Resp r = Http.fetch(jar, url, "GET", null, null, 15000);
+                if (r.code >= 300 && r.code < 400 && r.location != null && !r.location.isEmpty())
+                    r = Http.follow(jar, url, false);
+                WebFlow.requireHttpSuccess(r.flow());
+                if (r.body.trim().startsWith("<")) throw new WebFlow.FlowException("SCHEMA_UNVERIFIED", "接口返回 HTML 而非 JSON");
+                String t = r.body.trim();
+                if (t.startsWith("while(1);")) t = t.substring("while(1);".length()).trim();
+                if (t.startsWith("[")) return new JSONArray(t);
+                if (t.startsWith("{")) {
+                    JSONObject o = new JSONObject(t);
+                    if (o.optString("status").contains("未经身份") || o.optString("status").contains("unauth")) {
+                        throw new Exception("eLearning 会话无效（未经身份验证）");
+                    }
+                    return o;
+                }
+                throw new Exception("非 JSON");
+            } catch (java.io.IOException e) {
+                last = e;
+                try { Thread.sleep(260L * (attempt + 1)); } catch (InterruptedException ie) {
+                    Thread.currentThread().interrupt();
+                    throw ie;
+                }
             }
-            return o;
         }
+        if (last != null) throw last;
         throw new Exception("非 JSON");
     }
 
@@ -1183,6 +1288,16 @@ final class FudanClient {
         }
         String s = String.valueOf(o);
         return "null".equals(s) ? "" : s;
+    }
+
+    private JSONArray previousBySource(String source) {
+        JSONArray out = new JSONArray();
+        if (source == null) return out;
+        for (int i = 0; i < lastItems.length(); i++) {
+            JSONObject it = lastItems.optJSONObject(i);
+            if (it != null && source.equals(it.optString("source"))) out.put(it);
+        }
+        return out;
     }
 
     private static void concat(JSONArray a, JSONArray b) {

@@ -91,6 +91,17 @@ export function IconSettings({ className }: { className?: string }) {
   );
 }
 
+export function IconNote({ className }: { className?: string }) {
+  return (
+    <Glyph className={className}>
+      <path d="M6.2 3.2h8.2L19.8 8.6v12.2c0 .9-.7 1.6-1.6 1.6H6.2c-.9 0-1.6-.7-1.6-1.6V4.8c0-.9.7-1.6 1.6-1.6Z" />
+      <path d="M14.2 3.4v5.2h5.2" fill="none" stroke="#fff8f0" strokeWidth="1.6" />
+      <rect x="7.4" y="11.2" width="9.2" height="1.6" rx=".6" fill="#fff8f0" />
+      <rect x="7.4" y="14.4" width="6.4" height="1.6" rx=".6" fill="#fff8f0" />
+    </Glyph>
+  );
+}
+
 export function IconDownload({ className }: { className?: string }) {
   return (
     <Glyph className={className}>
